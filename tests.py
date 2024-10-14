@@ -306,8 +306,9 @@ def test_papply():
  
 
 def test_mpapply():
-    assert mpapply(lambda x, y: frozenset({(x, (i, j)) for _, (i, j) in y}), (3, 4), frozenset({frozenset({(1, (0, 0))}), frozenset({(1, (1, 1)), (1, (0, 1))})})) == ((3, (0, 0)), (4, (1, 1)), (4, (0, 1)))
- 
+    result = mpapply(lambda x, y: frozenset({(x, (i, j)) for _, (i, j) in y}), (3, 4), frozenset({frozenset({(1, (0, 0))}), frozenset({(1, (1, 1)), (1, (0, 1))})}))
+    print(f"Result: {result}")
+    assert result == ((3, (0, 0)), (4, (1, 1)), (4, (0, 1)))
 
 def test_prapply():
     assert prapply(lambda x, y: x + y, {1, 2}, {2, 3}) == frozenset({3, 4, 5})

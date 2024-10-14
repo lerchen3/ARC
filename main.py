@@ -12,23 +12,22 @@ import solvers
 
 
 def get_data(train=True):
-    path = f'../data/{"training" if train else "evaluation"}'
-    data = {}
-    for fn in os.listdir(path):
-        with open(f'{path}/{fn}') as f:
-            data[fn.rstrip('.json')] = json.load(f)
+    filename = 'arc-agi_training_challenges.json' if train else 'arc-agi_evaluation_challenges.json'
+    
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    
     ast = lambda g: tuple(tuple(r) for r in g)
+    
     return {
         'train': {k: [{
             'input': ast(e['input']),
             'output': ast(e['output']),
         } for e in v['train']] for k, v in data.items()},
         'test': {k: [{
-            'input': ast(e['input']),
-            'output': ast(e['output']),
+            'input': ast(e['input'])
         } for e in v['test']] for k, v in data.items()}
     }
-
 
 def get_functions(path):
     """ returns a list of available functions """
