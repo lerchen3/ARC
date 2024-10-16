@@ -3230,7 +3230,6 @@ def solve_6cf79266(I):
 
 def solve_a87f7484(I):
     x1 = numcolors(I)
-    x2 = dmirror(I)
     x3 = portrait(I)
     x4 = branch(x3, dmirror, identity)
     x5 = x4(I)
@@ -4713,7 +4712,6 @@ def solve_72322fa7(I):
 
 
 def solve_855e0971(I):
-    x1 = rot90(I)
     x2 = frontiers(I)
     x3 = sfilter(x2, hline)
     x4 = size(x3)

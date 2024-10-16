@@ -9,24 +9,51 @@ import dsl
 import tests
 import solvers
 
-
-
 def get_data(train=True):
     filename = 'arc-agi_training_challenges.json' if train else 'arc-agi_evaluation_challenges.json'
+    solutions_filename = 'arc-agi_training_solutions.json' if train else 'arc-agi_evaluation_solutions.json'
     
-    with open(filename, 'r') as f:
-        data = json.load(f)
+    try:
+        with open(filename, 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File {filename} not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: Failed to decode JSON from {filename}.")
+        return None
+    
+    try:
+        with open(solutions_filename, 'r') as f:
+            solutions = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File {solutions_filename} not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: Failed to decode JSON from {solutions_filename}.")
+        return None
     
     ast = lambda g: tuple(tuple(r) for r in g)
-    
-    return {
-        'train': {k: [{
+
+    # Process the training data
+    train_data = {
+        k: [{
             'input': ast(e['input']),
             'output': ast(e['output']),
-        } for e in v['train']] for k, v in data.items()},
-        'test': {k: [{
-            'input': ast(e['input'])
-        } for e in v['test']] for k, v in data.items()}
+        } for e in v['train']] for k, v in data.items()
+    }
+    
+    # Process the test data and match solutions
+    test_data = {
+        k: [{
+            'input': ast(e['input']),
+            'output': ast(solutions[k][0]) if k in solutions else None,  # Handling solutions[k][0] since solution is 3D
+        } for e in v['test']] for k, v in data.items()
+    }
+    
+    return {
+        'train': train_data,
+        'test': test_data
     }
 
 def get_functions(path):
@@ -52,7 +79,7 @@ def run_dsl_tests(dsl_module, test_module):
 
 
 def test_solvers_formatting(solvers_module, dsl_module):
-    """ tests the implementd solvers for formatting """
+    """ tests the implemented solvers for formatting """
     with open('constants.py', 'r') as f:
         constants = [c.split(' = ')[0] for c in f.readlines() if ' = ' in c]
     definitions = {
@@ -62,6 +89,7 @@ def test_solvers_formatting(solvers_module, dsl_module):
     dsl_interface = get_functions(dsl_module.__file__)
     n_correct = 0
     n = len(definitions)
+    incorrect_solvers = []
     for key, definition in definitions.items():
         try:
             lines = definition.split('\n')
@@ -94,8 +122,12 @@ def test_solvers_formatting(solvers_module, dsl_module):
                 ]) > 1 or v == 'O'
             n_correct += 1
         except:
-            pass
+            incorrect_solvers.append(key)
     print(f'{n_correct} out of {n} solvers formatted correctly.')
+    if incorrect_solvers:
+        print('Incorrectly formatted solvers:')
+        for solver in incorrect_solvers:
+            print(f' - {solver}')
 
 
 def test_solvers_correctness(data, solvers_module):
@@ -107,10 +139,13 @@ def test_solvers_correctness(data, solvers_module):
         try:
             solver = getattr(solvers_module, f'solve_{key}')
             for ex in task:
-                assert solver(ex['input']) == ex['output']
+                if(solver(ex['input']) != ex['output']):
+                    print(solver(ex['input']))
+                    print(ex['output'])
+            assert solver(ex['input']) == ex['output']
             n_correct += 1
-        except:
-            pass
+        except Exception as e:
+            print(f'Error in solving task {key}: {e}')
     print(f'{n_correct} out of {n} tasks solved correctly.')
 
 
