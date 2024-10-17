@@ -55,6 +55,8 @@ def divide(
     b: Numerical
 ) -> Numerical:
     """ floor division """
+    if(b <= 0):
+        b = 1
     if isinstance(a, int) and isinstance(b, int):
         return a // b
     elif isinstance(a, tuple) and isinstance(b, tuple):
@@ -1128,6 +1130,8 @@ def downscale(
     """ downscale grid """
     h, w = len(grid), len(grid[0])
     g = tuple()
+    if(factor <= 0):
+        factor = 1
     for i in range(h):
         r = tuple()
         for j in range(w):
@@ -1171,6 +1175,8 @@ def hsplit(
     n: Integer
 ) -> Tuple:
     """ split grid horizontally """
+    if(n <= 0):
+        n = 1
     h, w = len(grid), len(grid[0]) // n
     offset = len(grid[0]) % n != 0
     return tuple(crop(grid, (0, w * i + i * offset), (h, w)) for i in range(n))
@@ -1181,6 +1187,8 @@ def vsplit(
     n: Integer
 ) -> Tuple:
     """ split grid vertically """
+    if(n <= 0):
+        n = 1
     h, w = len(grid) // n, len(grid[0])
     offset = len(grid) % n != 0
     return tuple(crop(grid, (h * i + i * offset, 0), (h, w)) for i in range(n))
