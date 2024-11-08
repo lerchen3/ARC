@@ -3,9 +3,10 @@ import base64
 import json
 import os
 
-from dotenv import load_dotenv
 from openai import OpenAI
-from PIL import Image, ImageDraw
+
+from prompting_utils import grid_to_python_literal
+from vision_prompting import create_transformation_image
 
 max_search_depth = 100
 observation_gen_temp = 1.1
@@ -20,96 +21,6 @@ client = OpenAI()
 # Load the JSON file
 with open('arc-agi_evaluation_challenges.json', 'r') as f:
     arc_tasks = json.load(f)
-
-# Color mapping, including color 10 for the arrow
-arc_agi_colors = {
-    0: "#000000",  # Black
-    1: "#0074D9",  # Blue
-    2: "#FF4136",  # Red
-    3: "#2ECC40",  # Green
-    4: "#FFDC00",  # Yellow
-    5: "#AAAAAA",  # Gray
-    6: "#F012BE",  # Magenta
-    7: "#FF851B",  # Orange
-    8: "#7FDBFF",  # Cyan
-    9: "#B10DC9",  # Brown
-    10: "#FFFFFF"  # White for arrow
-}
-
-# Function to create the transformation image
-
-
-def create_transformation_image(input_grid, output_grid, scaling_factor=10):
-    # Scale up the grids
-    w_in = len(input_grid[0]) * scaling_factor
-    h_in = len(input_grid) * scaling_factor
-
-    w_out = len(output_grid[0]) * scaling_factor
-    h_out = len(output_grid) * scaling_factor
-
-    # Compute dimensions based on the instructions
-    arrow_width = (w_in + w_out) // 2
-    total_width = w_in + w_out + 20 + arrow_width
-    total_height = max(h_in, h_out)
-
-    # Create a new image with the computed dimensions
-    img = Image.new('RGB', (total_width, total_height),
-                    color=arc_agi_colors[0])
-    draw = ImageDraw.Draw(img)
-
-    # Draw the input grid centered on the left side
-    x_in = 0
-    y_in = (total_height - h_in) // 2
-    for i, row in enumerate(input_grid):
-        for j, cell in enumerate(row):
-            color = arc_agi_colors.get(cell, "#000000")
-            x0 = x_in + j * scaling_factor
-            y0 = y_in + i * scaling_factor
-            x1 = x0 + scaling_factor
-            y1 = y0 + scaling_factor
-            draw.rectangle([x0, y0, x1, y1], fill=color)
-
-    # Draw the output grid centered on the right side
-    x_out = w_in + 20 + arrow_width
-    y_out = (total_height - h_out) // 2
-    for i, row in enumerate(output_grid):
-        for j, cell in enumerate(row):
-            color = arc_agi_colors.get(cell, "#000000")
-            x0 = x_out + j * scaling_factor
-            y0 = y_out + i * scaling_factor
-            x1 = x0 + scaling_factor
-            y1 = y0 + scaling_factor
-            draw.rectangle([x0, y0, x1, y1], fill=color)
-
-    # Draw the arrow between input and output grids
-    x_arrow_start = w_in + 10
-    x_arrow_end = x_out - 10
-    y_arrow = total_height // 2
-    arrow_height = 20  # Adjusted for better visibility
-    arrowhead_depth = 30  # Adjusted for better visibility
-
-    # Draw the arrow shaft
-    draw.rectangle(
-        [x_arrow_start, y_arrow - arrow_height // 2,
-            x_arrow_end, y_arrow + arrow_height // 2],
-        fill=arc_agi_colors[10]
-    )
-
-    # Draw the arrowhead
-    arrowhead = [
-        (x_arrow_end, y_arrow),
-        (x_arrow_end - arrowhead_depth, y_arrow - arrowhead_depth // 2),
-        (x_arrow_end - arrowhead_depth, y_arrow + arrowhead_depth // 2)
-    ]
-    draw.polygon(arrowhead, fill=arc_agi_colors[10])
-
-    return img
-
-# Function to convert grids to their literal Python representation
-
-
-def grid_to_python_literal(grid):
-    return repr(grid)
 
 # Function to generate observations
 
@@ -433,11 +344,12 @@ for task_id, task in arc_tasks.items():
     print(f"Processing task {task_id}")
     num_examples = len(task['train'])
 
-    # Ensure the 'task_images' directory exists
-    os.makedirs('task_images', exist_ok=True)
-
+    # Now, generate observations
     # List to store examples with images
     examples_with_images = []
+
+    # Ensure the 'task_images' directory exists
+    os.makedirs('task_images', exist_ok=True)
 
     # Create images for each example and collect them
     for idx, example in enumerate(task['train']):
@@ -445,15 +357,11 @@ for task_id, task in arc_tasks.items():
         output_grid = example['output']
 
         # Create the image representing the transformation
-        img = create_transformation_image(input_grid, output_grid)
-
-        # Save the image as a .png file in 'task_images' folder
         image_filename = f"task_images/{task_id}_{idx+1}.png"
-        img.save(image_filename)
 
-        # Encode the image in base64
-        with open(image_filename, "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        base64_image = create_transformation_image(
+            input_grid, output_grid, save_location=image_filename,
+            cache=True, return_base64=True)
 
         # Add the base64 image to the example
         example_with_image = {
@@ -463,7 +371,6 @@ for task_id, task in arc_tasks.items():
         }
         examples_with_images.append(example_with_image)
 
-    # Now, generate observations
     observations = generate_observations(
         num_observations=256,
         examples=examples_with_images
