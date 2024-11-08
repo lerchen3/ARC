@@ -1,12 +1,21 @@
-import os
-os.environ['OPENAI_API_KEY'] = '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'  # Replace with your actual API key
+#Controls!
+max_search_depth = 100
+observation_gen_temp = 1.1
+observation_classify_temp = 0.5
+observation_select_temp = 0.5
+code_verifier_gen_temp = 0.8
 
+import os
 import json
 import base64
 import requests
 from PIL import Image, ImageDraw
 
-api_key = os.environ['OPENAI_API_KEY']
+# Set your OpenAI API key
+api_key = os.getenv('OPENAI_API_KEY')
+
+if api_key is None:
+    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
 
 # Load the JSON file
 with open('arc-agi_evaluation_challenges.json', 'r') as f:
@@ -96,7 +105,301 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
 def grid_to_python_literal(grid):
     return repr(grid)
 
-# Now, process each task
+# Function to generate observations
+def generate_observations(num_observations, examples, additional_context=None):
+    # Adjust the number of observations per call to stay within token limits
+    max_observations_per_call = 50  # Adjusted to ensure we stay within 8192 tokens
+    total_observations = []
+    observations_remaining = num_observations
+
+    while observations_remaining > 0:
+        observations_to_request = min(observations_remaining, max_observations_per_call)
+        # Construct the prompt
+        content_text = (
+            f"Please analyze the transformations shown in the following examples and provide {observations_to_request} observations about the nature of the transformations, the input grids, or the output grids. "
+            "Bottom line, help me understand the input, the output, and the transformation from just natural language. "
+            "Try to be very, very, very, very, very insightful! "
+            "Return only the list of observations in valid JSON format."
+        )
+        if additional_context:
+            content_text += "\n Here's an observation I made. For all all of the observations you give, please give a refining of this observation in some way, whether by elaboration, correction, or modification:\n" + additional_context
+
+        # Prepare the messages for the API
+        messages = [
+            {
+                "role": "user",
+                "content": content_text
+            }
+        ]
+
+        # Add examples
+        for idx, example in enumerate(examples):
+            input_grid = example['input']
+            output_grid = example['output']
+            input_literal = grid_to_python_literal(input_grid)
+            output_literal = grid_to_python_literal(output_grid)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Example {idx+1}:"
+                }
+            )
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\n Here's what color each number corresponds to. 0: Black, 1: Blue, 2: Red, 3: Green, 4: Yellow, 5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown. "
+                }
+            )
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 2048,
+            "n": 1,
+            "temperature": observation_gen_temp
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+
+        observations = []
+
+        # Process the response
+        if response.status_code == 200:
+            completion = response.json()
+            response_content = completion['choices'][0]['message']['content']
+            try:
+                response_content = response_content.strip()
+                # Find the first '[' and last ']' to extract the JSON array
+                start_index = response_content.find('[')
+                end_index = response_content.rfind(']') + 1
+
+                if start_index == -1 or end_index == -1:
+                    print("Could not find JSON array in the response.")
+                    return total_observations
+
+                json_str = response_content[start_index:end_index]
+                observations = json.loads(json_str)
+                total_observations.extend(observations)
+            except Exception as e:
+                print(f"Error processing GPT-4 response: {e}")
+                return total_observations
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            return total_observations
+
+        observations_remaining -= observations_to_request
+
+    return total_observations
+
+# Function to classify observations into 'yes' and 'no'
+def classify_observations(observations):
+    # Adjust the number of observations per call to stay within token limits
+    max_observations_per_call = 100  # Adjusted to ensure we stay within 8192 tokens
+    yes_observations = []
+    no_observations = []
+    for i in range(0, len(observations), max_observations_per_call):
+        print(len(no_observations))
+        print("^ amt of no observations (please be >0 lmfao)")
+        batch = observations[i:i+max_observations_per_call]
+        content_text = (
+            "Given the following observations about the transformations, please determine whether one could easily make "
+            "very, very well-defined and correct code that could verify that these observations are indeed true for the given examples "
+            "(you should be saying No for at least a quarter of these observations). "
+            "For each observation, answer 'Yes' if code could easily verify it, or 'No' if not. "
+            "Create a compilation of the 'Yes's into a Python list called 'yes_observations', and the 'No's into a Python list called 'no_observations'. Return only these lists."
+        )
+
+        messages = [
+            {
+                "role": "user",
+                "content": content_text
+            },
+            {
+                "role": "user",
+                "content": "Observations:\n" + json.dumps(batch, indent=2)
+            }
+        ]
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 1024,
+            "n": 1,
+            "temperature": observation_classify_temp
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+
+        # Process the response
+        if response.status_code == 200:
+            completion = response.json()
+            response_content = completion['choices'][0]['message']['content']
+            try:
+                # Execute the response to extract the lists
+                local_vars = {}
+                exec(response_content, {}, local_vars)
+                yes_batch = local_vars.get('yes_observations', [])
+                no_batch = local_vars.get('no_observations', [])
+                yes_observations.extend(yes_batch)
+                no_observations.extend(no_batch)
+            except Exception as e:
+                print(f"Error processing GPT-4 response: {e}")
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+
+    return yes_observations, no_observations
+
+# Function to select best observations
+def select_best_observations(observations, num_best, context):
+    # Adjust the number of observations per call to stay within token limits
+    max_observations_per_call = 100  # Adjusted to ensure we stay within 8192 tokens
+    selected_observations = []
+    for i in range(0, len(observations), max_observations_per_call):
+        batch = observations[i:i+max_observations_per_call]
+        content_text = (
+            f"Given the following observations that are {context}, please select up to {num_best} best observations that would be most crucial to a complete understanding of the input, output, and transformation. "
+            f"Include somewhere a Python list of these observations called 'best_observations'. Return only this list."
+        )
+
+        messages = [
+            {
+                "role": "user",
+                "content": content_text
+            },
+            {
+                "role": "user",
+                "content": "Observations:\n" + json.dumps(batch, indent=2)
+            }
+        ]
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 1024,
+            "n": 1,
+            "temperature": observation_select_temp
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+
+        # Process the response
+        if response.status_code == 200:
+            completion = response.json()
+            response_content = completion['choices'][0]['message']['content']
+            try:
+                # Execute the response to extract the list
+                local_vars = {}
+                exec(response_content, {}, local_vars)
+                best_batch = local_vars.get('best_observations', [])
+                selected_observations.extend(best_batch)
+                if len(selected_observations) >= num_best:
+                    return selected_observations[:num_best]
+            except Exception as e:
+                print(f"Error processing GPT-4 response: {e}")
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+
+    return selected_observations[:num_best]
+
+# Function to generate code verifiers for observations
+def generate_code_verifiers_for_block(observations_block, examples):
+    # observations_block: list of observations
+    # Returns: observations_with_code: dict mapping observation to dict of code verifiers
+    observations_with_code = {}
+    # Adjusted number of observations per call to stay within token limits
+    max_observations_per_call = 5  # Adjusted to ensure we stay within 8192 tokens
+
+    for i in range(0, len(observations_block), max_observations_per_call):
+        batch = observations_block[i:i+max_observations_per_call]
+        content_text = (
+            "Please write code that verifies each of the following observations for given input and output grids. "
+            "For each observation, the code should be of the form 'def check_observation(input_grid, output_grid): ...'. "
+            "Be careful that the code verifies exactly the natural language description. "
+            "Implement a soundproof code. "
+            "Provide 4 different implementations for each observation."
+        )
+        # Prepare the messages
+        messages = [
+            {
+                "role": "user",
+                "content": content_text
+            },
+            {
+                "role": "user",
+                "content": "Observations:\n" + json.dumps(batch, indent=2)
+            }
+        ]
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 2048,
+            "n": 1,
+            "temperature": code_verifier_gen_temp
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+
+        # Process the response
+        if response.status_code == 200:
+            completion = response.json()
+            response_content = completion['choices'][0]['message']['content']
+            try:
+                # Parse the response to extract code verifiers for each observation
+                # This parsing logic may need to be adjusted based on the response format
+                # For simplicity, we assume the response is a JSON object
+                code_verifiers = json.loads(response_content)
+                for observation in batch:
+                    if observation in code_verifiers:
+                        observations_with_code[observation] = code_verifiers[observation]
+            except Exception as e:
+                print(f"Error processing GPT-4 response: {e}")
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+
+    return observations_with_code
+
+# Main processing code
 cnt = 0
 for task_id, task in arc_tasks.items():
     cnt += 1
@@ -130,131 +433,64 @@ for task_id, task in arc_tasks.items():
         # Collect the base64 image
         image_contents.append(base64_image)
 
-    # Build the content list for the API call
-    content_text = (
-        "Please analyze the transformations shown in the following examples and provide 10 concrete observations about the nature of the transformations, the input grids, or the output grids. "
-        "For example, a possible observation is that \"The input and output grid sizes are the same.\". "
-        "Another example is that \"The input grid has contains many blue-colored three-block objects.\". "
-        "Bottom line, help me understand the input, the output, and the transformation from just natural language. "
-        "Be assertive and specific. For example, don't say \"There are multiple yellow objects in the input grid.\"; instead, a better and more assertive and specific observation would be to mention exactly how many objects there are."
-        "Try to be very, very, very insighftul!"
-        "Each observation should be a dictionary with keys \"NL Description\" and \"Observation code\". "
-        "The \"Observation code\" should be code that takes in two grids and returns True if the description is indeed correct about the input-output pair. "
-        "Be careful that the observation code verifies exactly the natural language description."
-        "The observation code should be of the form \"def check_observation(input_grid, output_grid): ...\". "
-        "Return only the list of observations in valid JSON format."
-    )
+    # Now, generate 256 observations in multiple calls
+    observations = generate_observations(num_observations=256, examples=task['train'])
 
-    # Prepare the messages for the API
-    messages = [
-        {
-            "role": "user",
-            "content": content_text
-        }
-    ]
+    # Classify observations into 'yes' and 'no'
+    yes_observations, no_observations = classify_observations(observations)
 
-    # Add literal Python representations of the grids along with images
-    for idx, (base64_image, example) in enumerate(zip(image_contents, task['train'])):
-        input_grid = example['input']
-        output_grid = example['output']
+    # Select the 16 best 'yes' observations
+    best_yes_observations = select_best_observations(yes_observations, 16, 'easily verifiable by code and crucial to understanding the transformation')
 
-        # Convert grids to their literal Python representation
-        input_literal = grid_to_python_literal(input_grid)
-        output_literal = grid_to_python_literal(output_grid)
+    # Select the 16 best 'no' observations
+    best_no_observations = select_best_observations(no_observations, 16, 'not easily verifiable by code but, if explored further, could provide valuable insights')
 
-        messages.append(
-            {
-                "role": "user",
-                "content": f"Example {idx+1}:"
-            }
-        )
-        messages.append(
-            {
-                "role": "user",
-                "content": f"![](data:image/png;base64,{base64_image})"
-            }
-        )
-        messages.append(
-            {
-                "role": "user",
-                "content": f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\n Here's what color each number corresponds to. 0: Black, 1: Blue, 2: Red, 3: Green, 4: Yellow, 5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown. "
-            }
-        )
+    # Initialize observations and 'no's lists
+    observations_list = best_yes_observations
+    nos_list = best_no_observations
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
+    # Now, for search_depth in range(1, max_search_depth+1)
+    for search_depth in range(1, max_search_depth+1):
+        print(f"Search Depth: {search_depth}")
+        if not nos_list:
+            break  # No more 'no' observations to expand upon
+        new_observations = []
+        new_nos = []
+        for no_observation in nos_list:
+            # Generate 16 observations branching from this 'no' observation
+            additional_context = f"Observation to expand upon:\n{no_observation}"
+            observations = generate_observations(num_observations=16, examples=task['train'], additional_context=additional_context)
+            # Classify observations
+            yes_observations, no_observations = classify_observations(observations)
+            # Select best observations
+            best_yes_observations = select_best_observations(yes_observations, 16, 'easily verifiable by code and crucial to understanding the transformation')
+            best_no_observations = select_best_observations(no_observations, 16, 'not easily verifiable by code but, if explored further, could provide valuable insights')
+            # Add to lists
+            observations_list.extend(best_yes_observations)
+            new_nos.extend(best_no_observations)
+        nos_list = new_nos
 
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": messages,
-        "max_tokens": 5000,  # Adjust as needed
-        "n": 16,             # Generate 16 completions
-        "temperature": 1.1   # Set temperature to 1.1 for diversity
-    }
+    # Now, break observations_list into blocks and generate code verifiers
+    observations_with_code = generate_code_verifiers_for_block(observations_list, task['train'])
 
-    # Send the request to the GPT-4 API
-    response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-
-    # Initialize the observations list
-    observations = []
-
-    # Process the response
-    if response.status_code == 200:
-        completion = response.json()
-
-        # Iterate over each completion
-        for choice in completion['choices']:
-            # Extract the assistant's reply
-            response_content = choice['message']['content']
-            try:
-                # Remove any leading/trailing text before and after the JSON array
-                response_content = response_content.strip()
-
-                # Find the first '[' and last ']' to extract the JSON array
-                start_index = response_content.find('[')
-                end_index = response_content.rfind(']') + 1
-
-                if start_index == -1 or end_index == -1:
-                    print("Could not find JSON array in the response.")
-                    continue
-
-                json_str = response_content[start_index:end_index]
-
-                # Parse the JSON array
-                parsed_list = json.loads(json_str)
-
-                # Append observations to the list
-                for item in parsed_list:
-                    nl_description = item['NL Description']
-                    observation_code = item['Observation code']
-                    observations.append((nl_description, observation_code))
-
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-
-        # Validate the observations
-        valid_observations = []
-        for description, code in observations:
+    # Validate the observations
+    valid_observations = []
+    for observation, code_dict in observations_with_code.items():
+        all_codes_valid = True
+        for code_verifier_name, code_str in code_dict.items():
             # Prepare the function definition
-            code_str = code.strip()
+            code_str = code_str.strip()
             # Ensure that the function is defined
             if not code_str.startswith("def check_observation(input_grid, output_grid):"):
-                print(f"Invalid function definition in observation code:\n{code_str}")
-                continue
-
+                print(f"Invalid function definition in {code_verifier_name} of observation '{observation}'.")
+                all_codes_valid = False
+                break
             # Execute the code to define the function
             local_vars = {}
             try:
                 exec(code_str, globals(), local_vars)
                 check_observation = local_vars['check_observation']
                 all_hold = True
-
                 # Test the observation on all training examples
                 for example in task['train']:
                     input_grid = example['input']
@@ -263,17 +499,19 @@ for task_id, task in arc_tasks.items():
                     if not result:
                         all_hold = False
                         break
-
-                if all_hold:
-                    valid_observations.append((description, code))
+                if not all_hold:
+                    all_codes_valid = False
+                    break
             except Exception as e:
-                print(f"Error executing code for observation '{description}': {e}")
+                print(f"Error executing code for observation '{observation}': {e}")
+                all_codes_valid = False
+                break
+        if all_codes_valid:
+            valid_observations.append((observation, code_dict))
 
-        # Print the valid observations
-        print("\nValid Observations:")
-        for description, code in valid_observations:
-            print(f"\nDescription: {description}\nCode:\n{code}")
-
-    else:
-        print(f"Error: {response.status_code}")
-        print(response.text)
+    # Print the valid observations with code verifiers
+    print("\nValid Observations:")
+    for observation, code_dict in valid_observations:
+        print(f"\nObservation: {observation}")
+        for code_verifier_name, code_str in code_dict.items():
+            print(f"{code_verifier_name}:\n{code_str}\n")
