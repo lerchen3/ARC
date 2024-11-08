@@ -1,4 +1,4 @@
-#Controls!
+#Controls
 max_search_depth = 100
 observation_gen_temp = 1.1
 observation_classify_temp = 0.5
@@ -11,6 +11,8 @@ import base64
 import requests
 from PIL import Image, ImageDraw
 from dotenv import load_dotenv
+
+
 load_dotenv()  # Make sure this comes before accessing the environment variable.
 
 # Set your OpenAI API key
@@ -61,7 +63,7 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     y_in = (total_height - h_in) // 2
     for i, row in enumerate(input_grid):
         for j, cell in enumerate(row):
-            color = arc_agi_colors[cell]
+            color = arc_agi_colors.get(cell, "#000000")
             x0 = x_in + j * scaling_factor
             y0 = y_in + i * scaling_factor
             x1 = x0 + scaling_factor
@@ -73,7 +75,7 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     y_out = (total_height - h_out) // 2
     for i, row in enumerate(output_grid):
         for j, cell in enumerate(row):
-            color = arc_agi_colors[cell]
+            color = arc_agi_colors.get(cell, "#000000")
             x0 = x_out + j * scaling_factor
             y0 = y_out + i * scaling_factor
             x1 = x0 + scaling_factor
@@ -84,8 +86,8 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     x_arrow_start = w_in + 10
     x_arrow_end = x_out - 10
     y_arrow = total_height // 2
-    arrow_height = 2  # 2 blocks thick (w/o scaling by 10)
-    arrowhead_depth = (w_in + w_out) // 4
+    arrow_height = 20  # Adjusted for better visibility
+    arrowhead_depth = 30  # Adjusted for better visibility
 
     # Draw the arrow shaft
     draw.rectangle(
@@ -96,8 +98,8 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     # Draw the arrowhead
     arrowhead = [
         (x_arrow_end, y_arrow),
-        (3 + x_arrow_end - arrowhead_depth//2, y_arrow - arrowhead_depth//2),
-        (3 + x_arrow_end - arrowhead_depth//2, y_arrow + arrowhead_depth//2)
+        (x_arrow_end - arrowhead_depth, y_arrow - arrowhead_depth // 2),
+        (x_arrow_end - arrowhead_depth, y_arrow + arrowhead_depth // 2)
     ]
     draw.polygon(arrowhead, fill=arc_agi_colors[10])
 
@@ -110,7 +112,7 @@ def grid_to_python_literal(grid):
 # Function to generate observations
 def generate_observations(num_observations, examples, additional_context=None):
     # Adjust the number of observations per call to stay within token limits
-    max_observations_per_call = 50  # Adjusted to ensure we stay within 8192 tokens
+    max_observations_per_call = 50  # Adjusted for token limits
     total_observations = []
     observations_remaining = num_observations
 
@@ -124,7 +126,7 @@ def generate_observations(num_observations, examples, additional_context=None):
             "Return only the list of observations in valid JSON format."
         )
         if additional_context:
-            content_text += "\n Here's an observation I made. For all all of the observations you give, please give a refining of this observation in some way, whether by elaboration, correction, or modification:\n" + additional_context
+            content_text += additional_context
 
         # Prepare the messages for the API
         messages = [
@@ -140,16 +142,24 @@ def generate_observations(num_observations, examples, additional_context=None):
             output_grid = example['output']
             input_literal = grid_to_python_literal(input_grid)
             output_literal = grid_to_python_literal(output_grid)
+            base64_image = example.get('base64_image', None)
             messages.append(
                 {
                     "role": "user",
                     "content": f"Example {idx+1}:"
                 }
             )
+            if base64_image:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"![Example {idx+1}](data:image/png;base64,{base64_image})"
+                    }
+                )
             messages.append(
                 {
                     "role": "user",
-                    "content": f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\n Here's what color each number corresponds to. 0: Black, 1: Blue, 2: Red, 3: Green, 4: Yellow, 5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown. "
+                    "content": f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\nHere's what color each number corresponds to. 0: Black, 1: Blue, 2: Red, 3: Green, 4: Yellow, 5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown."
                 }
             )
 
@@ -206,12 +216,12 @@ def generate_observations(num_observations, examples, additional_context=None):
 # Function to classify observations into 'yes' and 'no'
 def classify_observations(observations):
     # Adjust the number of observations per call to stay within token limits
-    max_observations_per_call = 100  # Adjusted to ensure we stay within 8192 tokens
+    max_observations_per_call = 50  # Adjusted for token limits
     yes_observations = []
     no_observations = []
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
-        content_text = ( #for some reason this guy does not wanna say no. like, to anything. bro literally said yes to every single one of the 256 ones even though hes trash at implementing. ig we're making him say no. smh my head LOL
+        content_text = (
             "Given the following observations about the transformations, please determine whether one could easily make "
             "very, very well-defined and correct code that could verify that these observations are indeed true for the given examples "
             "(make sure you say no for at least a quarter of these observations - if you run out of things to say no to, say no to the observations that would be really tedious to implement). "
@@ -254,7 +264,6 @@ def classify_observations(observations):
             completion = response.json()
             response_content = completion['choices'][0]['message']['content']
             try:
-                # Execute the response to extract the lists
                 local_vars = {}
                 exec(response_content, {}, local_vars)
                 yes_batch = local_vars.get('yes_observations', [])
@@ -272,7 +281,7 @@ def classify_observations(observations):
 # Function to select best observations
 def select_best_observations(observations, num_best, context):
     # Adjust the number of observations per call to stay within token limits
-    max_observations_per_call = 100  # Adjusted to ensure we stay within 8192 tokens
+    max_observations_per_call = 50  # Adjusted for token limits
     selected_observations = []
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
@@ -316,7 +325,6 @@ def select_best_observations(observations, num_best, context):
             completion = response.json()
             response_content = completion['choices'][0]['message']['content']
             try:
-                # Execute the response to extract the list
                 local_vars = {}
                 exec(response_content, {}, local_vars)
                 best_batch = local_vars.get('best_observations', [])
@@ -333,11 +341,9 @@ def select_best_observations(observations, num_best, context):
 
 # Function to generate code verifiers for observations
 def generate_code_verifiers_for_block(observations_block, examples):
-    # observations_block: list of observations
-    # Returns: observations_with_code: dict mapping observation to dict of code verifiers
     observations_with_code = {}
     # Adjusted number of observations per call to stay within token limits
-    max_observations_per_call = 5  # Adjusted to ensure we stay within 8192 tokens
+    max_observations_per_call = 20  # Adjusted for token limits
 
     for i in range(0, len(observations_block), max_observations_per_call):
         batch = observations_block[i:i+max_observations_per_call]
@@ -385,12 +391,90 @@ def generate_code_verifiers_for_block(observations_block, examples):
             response_content = completion['choices'][0]['message']['content']
             try:
                 # Parse the response to extract code verifiers for each observation
-                # This parsing logic may need to be adjusted based on the response format
-                # For simplicity, we assume the response is a JSON object
+                # Assuming the response is a JSON object mapping observations to code implementations
                 code_verifiers = json.loads(response_content)
                 for observation in batch:
                     if observation in code_verifiers:
                         observations_with_code[observation] = code_verifiers[observation]
+            except Exception as e:
+                print(f"Error processing GPT-4 response: {e}")
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+
+    return observations_with_code
+
+# Function to generate code for difficult observations
+def generate_code_for_difficult_observations(no_observations, examples):
+    # Function to generate code verifiers for difficult observations
+    observations_with_code = {}
+    for observation in no_observations:
+        content_text = (
+            "Please write code that verifies the following observation for "
+            "given input and output grids. The observation may be challenging "
+            "to implement, so please try very hard to write correct and efficient "
+            "code. You might need to implement complex algorithms like floodfill, "
+            "recursion, or other advanced techniques. For the observation, the code "
+            "should be of the form 'def check_observation(input_grid, output_grid): ...'. "
+            "Be careful that the code verifies exactly the natural language description. "
+            "Implement sound and robust code."
+        )
+        # Prepare the messages
+        messages = [
+            {
+                "role": "user",
+                "content": content_text
+            },
+            {
+                "role": "user",
+                "content": f"Observation:\n{observation}"
+            }
+        ]
+
+        # Include examples
+        examples_text = ""
+        for idx, example in enumerate(examples):
+            input_grid = example['input']
+            output_grid = example['output']
+            input_literal = grid_to_python_literal(input_grid)
+            output_literal = grid_to_python_literal(output_grid)
+            examples_text += (
+                f"\nExample {idx+1}:\nInput Grid:\n{input_literal}\n"
+                f"Output Grid:\n{output_literal}\n"
+            )
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Examples:{examples_text}"
+            }
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 2048,
+            "n": 1,
+            "temperature": code_verifier_gen_temp
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+
+        # Process the response
+        if response.status_code == 200:
+            completion = response.json()
+            response_content = completion['choices'][0]['message']['content']
+            try:
+                code_str = response_content.strip()
+                observations_with_code[observation] = code_str
             except Exception as e:
                 print(f"Error processing GPT-4 response: {e}")
         else:
@@ -411,8 +495,11 @@ for task_id, task in arc_tasks.items():
     print(f"Processing task {task_id}")
     num_examples = len(task['train'])
 
-    # List to store base64 encoded images
-    image_contents = []
+    # Ensure the 'task_images' directory exists
+    os.makedirs('task_images', exist_ok=True)
+
+    # List to store examples with images
+    examples_with_images = []
 
     # Create images for each example and collect them
     for idx, example in enumerate(task['train']):
@@ -422,28 +509,45 @@ for task_id, task in arc_tasks.items():
         # Create the image representing the transformation
         img = create_transformation_image(input_grid, output_grid)
 
-        # Save the image as a .png file
-        image_filename = f"{task_id}_{idx+1}.png"
+        # Save the image as a .png file in 'task_images' folder
+        image_filename = f"task_images/{task_id}_{idx+1}.png"
         img.save(image_filename)
 
         # Encode the image in base64
         with open(image_filename, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
 
-        # Collect the base64 image
-        image_contents.append(base64_image)
+        # Add the base64 image to the example
+        example_with_image = {
+            'input': input_grid,
+            'output': output_grid,
+            'base64_image': base64_image
+        }
+        examples_with_images.append(example_with_image)
 
-    # Now, generate 256 observations in multiple calls
-    observations = generate_observations(num_observations=256, examples=task['train'])
+    # Now, generate observations
+    observations = generate_observations(
+        num_observations=256,
+        examples=examples_with_images
+    )
 
     # Classify observations into 'yes' and 'no'
     yes_observations, no_observations = classify_observations(observations)
 
     # Select the 16 best 'yes' observations
-    best_yes_observations = select_best_observations(yes_observations, 16, 'easily verifiable by code and crucial to understanding the transformation')
+    best_yes_observations = select_best_observations(
+        yes_observations,
+        16,
+        'crucial to understanding the transformation'
+    )
 
     # Select the 16 best 'no' observations
-    best_no_observations = select_best_observations(no_observations, 16, 'not easily verifiable by code but, if explored further, could provide valuable insights')
+    best_no_observations = select_best_observations(
+        no_observations,
+        16,
+        ('not easily verifiable by code but, if explored further, '
+         'could provide valuable insights')
+    )
 
     # Initialize observations and 'no's lists
     observations_list = best_yes_observations
@@ -457,41 +561,61 @@ for task_id, task in arc_tasks.items():
         new_observations = []
         new_nos = []
         for no_observation in nos_list:
-            # Generate 16 observations branching from this 'no' observation
-            additional_context = f"Observation to expand upon:\n{no_observation}"
-            observations = generate_observations(num_observations=16, examples=task['train'], additional_context=additional_context)
+            # Generate observations branching from this 'no' observation
+            additional_context = (
+                f"\nHere's an observation I made. For all of the observations "
+                f"you give, please refine this observation in some way, whether "
+                f"by elaboration, correction, or modification:\n{no_observation}"
+            )
+            observations = generate_observations(
+                num_observations=16,
+                examples=examples_with_images,
+                additional_context=additional_context
+            )
             # Classify observations
-            yes_observations, no_observations = classify_observations(observations)
+            yes_obs, no_obs = classify_observations(observations)
             # Select best observations
-            best_yes_observations = select_best_observations(yes_observations, 16, 'easily verifiable by code and crucial to understanding the transformation')
-            best_no_observations = select_best_observations(no_observations, 16, 'not easily verifiable by code but, if explored further, could provide valuable insights')
+            best_yes_obs = select_best_observations(
+                yes_obs, 16,
+                ('easily verifiable by code and crucial to understanding '
+                 'the transformation')
+            )
+            best_no_obs = select_best_observations(
+                no_obs, 16,
+                ('not easily verifiable by code but, if explored further, '
+                 'could provide valuable insights')
+            )
             # Add to lists
-            observations_list.extend(best_yes_observations)
-            new_nos.extend(best_no_observations)
+            observations_list.extend(best_yes_obs)
+            new_nos.extend(best_no_obs)
         nos_list = new_nos
 
-    # Now, break observations_list into blocks and generate code verifiers
-    observations_with_code = generate_code_verifiers_for_block(observations_list, task['train'])
+    # Now, generate code verifiers for observations_list
+    observations_with_code = generate_code_verifiers_for_block(
+        observations_list,
+        examples_with_images
+    )
 
     # Validate the observations
     valid_observations = []
     for observation, code_dict in observations_with_code.items():
         all_codes_valid = True
         for code_verifier_name, code_str in code_dict.items():
-            # Prepare the function definition
             code_str = code_str.strip()
-            # Ensure that the function is defined
-            if not code_str.startswith("def check_observation(input_grid, output_grid):"):
-                print(f"Invalid function definition in {code_verifier_name} of observation '{observation}'.")
+            if not code_str.startswith(
+                "def check_observation(input_grid, output_grid):"
+            ):
+                print(
+                    f"Invalid function definition in {code_verifier_name} "
+                    f"of observation '{observation}'."
+                )
                 all_codes_valid = False
                 break
-            # Execute the code to define the function
             local_vars = {}
             try:
                 exec(code_str, globals(), local_vars)
                 check_observation = local_vars['check_observation']
                 all_hold = True
-                # Test the observation on all training examples
                 for example in task['train']:
                     input_grid = example['input']
                     output_grid = example['output']
@@ -503,11 +627,52 @@ for task_id, task in arc_tasks.items():
                     all_codes_valid = False
                     break
             except Exception as e:
-                print(f"Error executing code for observation '{observation}': {e}")
+                print(
+                    f"Error executing code for observation '{observation}': {e}"
+                )
                 all_codes_valid = False
                 break
         if all_codes_valid:
             valid_observations.append((observation, code_dict))
+
+    # Now, process the remaining 'no_observations' in nos_list
+    print("\nProcessing difficult observations:")
+    difficult_observations_with_code = generate_code_for_difficult_observations(
+        nos_list,
+        examples_with_images
+    )
+
+    # Validate the difficult observations
+    for observation, code_str in difficult_observations_with_code.items():
+        code_str = code_str.strip()
+        if not code_str.startswith(
+            "def check_observation(input_grid, output_grid):"
+        ):
+            print(
+                f"Invalid function definition for observation '{observation}'."
+            )
+            continue
+        local_vars = {}
+        try:
+            exec(code_str, globals(), local_vars)
+            check_observation = local_vars['check_observation']
+            all_hold = True
+            for example in task['train']:
+                input_grid = example['input']
+                output_grid = example['output']
+                result = check_observation(input_grid, output_grid)
+                if not result:
+                    all_hold = False
+                    break
+            if all_hold:
+                valid_observations.append(
+                    (observation, {'code_verifier': code_str})
+                )
+        except Exception as e:
+            print(
+                f"Error executing code for observation '{observation}': {e}"
+            )
+            continue
 
     # Print the valid observations with code verifiers
     print("\nValid Observations:")
