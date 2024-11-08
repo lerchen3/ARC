@@ -1,25 +1,30 @@
-#Controls
+# Controls
+import base64
+import json
+import os
+
+from dotenv import load_dotenv
+from openai import OpenAI
+from PIL import Image, ImageDraw
+
 max_search_depth = 100
 observation_gen_temp = 1.1
 observation_classify_temp = 0.5
 observation_select_temp = 0.5
 code_verifier_gen_temp = 0.8
 
-import os
-import json
-import base64
-import requests
-from PIL import Image, ImageDraw
-from dotenv import load_dotenv
 
-
-load_dotenv()  # Make sure this comes before accessing the environment variable.
+# Make sure this comes before accessing the environment variable.
+load_dotenv()
 
 # Set your OpenAI API key
 api_key = os.getenv('OPENAI_API_KEY')
 
 if api_key is None:
     raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+
+# Initialize OpenAI client
+client = OpenAI()
 
 # Load the JSON file
 with open('arc-agi_evaluation_challenges.json', 'r') as f:
@@ -41,6 +46,8 @@ arc_agi_colors = {
 }
 
 # Function to create the transformation image
+
+
 def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     # Scale up the grids
     w_in = len(input_grid[0]) * scaling_factor
@@ -55,7 +62,8 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     total_height = max(h_in, h_out)
 
     # Create a new image with the computed dimensions
-    img = Image.new('RGB', (total_width, total_height), color=arc_agi_colors[0])
+    img = Image.new('RGB', (total_width, total_height),
+                    color=arc_agi_colors[0])
     draw = ImageDraw.Draw(img)
 
     # Draw the input grid centered on the left side
@@ -91,7 +99,8 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
 
     # Draw the arrow shaft
     draw.rectangle(
-        [x_arrow_start, y_arrow - arrow_height // 2, x_arrow_end, y_arrow + arrow_height // 2],
+        [x_arrow_start, y_arrow - arrow_height // 2,
+            x_arrow_end, y_arrow + arrow_height // 2],
         fill=arc_agi_colors[10]
     )
 
@@ -106,10 +115,14 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     return img
 
 # Function to convert grids to their literal Python representation
+
+
 def grid_to_python_literal(grid):
     return repr(grid)
 
 # Function to generate observations
+
+
 def generate_observations(num_observations, examples, additional_context=None):
     # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
@@ -117,7 +130,8 @@ def generate_observations(num_observations, examples, additional_context=None):
     observations_remaining = num_observations
 
     while observations_remaining > 0:
-        observations_to_request = min(observations_remaining, max_observations_per_call)
+        observations_to_request = min(
+            observations_remaining, max_observations_per_call)
         # Construct the prompt
         content_text = (
             f"Please analyze the transformations shown in the following examples and provide {observations_to_request} observations about the nature of the transformations, the input grids, or the output grids. "
@@ -163,50 +177,34 @@ def generate_observations(num_observations, examples, additional_context=None):
                 }
             )
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "max_tokens": 2048,
-            "n": 1,
-            "temperature": observation_gen_temp
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
+        # Make the API call using the OpenAI client
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=2048,
+            n=1,
+            temperature=observation_gen_temp
         )
 
         observations = []
 
         # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                response_content = response_content.strip()
-                # Find the first '[' and last ']' to extract the JSON array
-                start_index = response_content.find('[')
-                end_index = response_content.rfind(']') + 1
+        try:
+            response_content = completion.choices[0].message.content
+            response_content = response_content.strip()
+            # Find the first '[' and last ']' to extract the JSON array
+            start_index = response_content.find('[')
+            end_index = response_content.rfind(']') + 1
 
-                if start_index == -1 or end_index == -1:
-                    print("Could not find JSON array in the response.")
-                    return total_observations
-
-                json_str = response_content[start_index:end_index]
-                observations = json.loads(json_str)
-                total_observations.extend(observations)
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
+            if start_index == -1 or end_index == -1:
+                print("Could not find JSON array in the response.")
                 return total_observations
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+
+            json_str = response_content[start_index:end_index]
+            observations = json.loads(json_str)
+            total_observations.extend(observations)
+        except Exception as e:
+            print(f"Error processing GPT-4 response: {e}")
             return total_observations
 
         observations_remaining -= observations_to_request
@@ -214,6 +212,8 @@ def generate_observations(num_observations, examples, additional_context=None):
     return total_observations
 
 # Function to classify observations into 'yes' and 'no'
+
+
 def classify_observations(observations):
     # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
@@ -240,45 +240,32 @@ def classify_observations(observations):
             }
         ]
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "max_tokens": 1024,
-            "n": 1,
-            "temperature": observation_classify_temp
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
+        # Make the API call using the OpenAI client
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=1024,
+            n=1,
+            temperature=observation_classify_temp
         )
 
         # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                local_vars = {}
-                exec(response_content, {}, local_vars)
-                yes_batch = local_vars.get('yes_observations', [])
-                no_batch = local_vars.get('no_observations', [])
-                yes_observations.extend(yes_batch)
-                no_observations.extend(no_batch)
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+        try:
+            response_content = completion.choices[0].message.content
+            local_vars = {}
+            exec(response_content, {}, local_vars)
+            yes_batch = local_vars.get('yes_observations', [])
+            no_batch = local_vars.get('no_observations', [])
+            yes_observations.extend(yes_batch)
+            no_observations.extend(no_batch)
+        except Exception as e:
+            print(f"Error processing GPT-4 response: {e}")
 
     return yes_observations, no_observations
 
 # Function to select best observations
+
+
 def select_best_observations(observations, num_best, context):
     # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
@@ -301,45 +288,32 @@ def select_best_observations(observations, num_best, context):
             }
         ]
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "max_tokens": 1024,
-            "n": 1,
-            "temperature": observation_select_temp
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
+        # Make the API call using the OpenAI client
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=1024,
+            n=1,
+            temperature=observation_select_temp
         )
 
         # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                local_vars = {}
-                exec(response_content, {}, local_vars)
-                best_batch = local_vars.get('best_observations', [])
-                selected_observations.extend(best_batch)
-                if len(selected_observations) >= num_best:
-                    return selected_observations[:num_best]
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+        try:
+            response_content = completion.choices[0].message.content
+            local_vars = {}
+            exec(response_content, {}, local_vars)
+            best_batch = local_vars.get('best_observations', [])
+            selected_observations.extend(best_batch)
+            if len(selected_observations) >= num_best:
+                return selected_observations[:num_best]
+        except Exception as e:
+            print(f"Error processing GPT-4 response: {e}")
 
     return selected_observations[:num_best]
 
 # Function to generate code verifiers for observations
+
+
 def generate_code_verifiers_for_block(observations_block, examples):
     observations_with_code = {}
     # Adjusted number of observations per call to stay within token limits
@@ -366,45 +340,32 @@ def generate_code_verifiers_for_block(observations_block, examples):
             }
         ]
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "max_tokens": 2048,
-            "n": 1,
-            "temperature": code_verifier_gen_temp
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
+        # Make the API call using the OpenAI client
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=2048,
+            n=1,
+            temperature=code_verifier_gen_temp
         )
 
         # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                # Parse the response to extract code verifiers for each observation
-                # Assuming the response is a JSON object mapping observations to code implementations
-                code_verifiers = json.loads(response_content)
-                for observation in batch:
-                    if observation in code_verifiers:
-                        observations_with_code[observation] = code_verifiers[observation]
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+        try:
+            response_content = completion.choices[0].message.content
+            # Parse the response to extract code verifiers for each observation
+            # Assuming the response is a JSON object mapping observations to code implementations
+            code_verifiers = json.loads(response_content)
+            for observation in batch:
+                if observation in code_verifiers:
+                    observations_with_code[observation] = code_verifiers[observation]
+        except Exception as e:
+            print(f"Error processing GPT-4 response: {e}")
 
     return observations_with_code
 
 # Function to generate code for difficult observations
+
+
 def generate_code_for_difficult_observations(no_observations, examples):
     # Function to generate code verifiers for difficult observations
     observations_with_code = {}
@@ -449,39 +410,25 @@ def generate_code_for_difficult_observations(no_observations, examples):
             }
         )
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "max_tokens": 2048,
-            "n": 1,
-            "temperature": code_verifier_gen_temp
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
+        # Make the API call using the OpenAI client
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=2048,
+            n=1,
+            temperature=code_verifier_gen_temp
         )
 
         # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                code_str = response_content.strip()
-                observations_with_code[observation] = code_str
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+        try:
+            response_content = completion.choices[0].message.content
+            code_str = response_content.strip()
+            observations_with_code[observation] = code_str
+        except Exception as e:
+            print(f"Error processing GPT-4 response: {e}")
 
     return observations_with_code
+
 
 # Main processing code
 cnt = 0
