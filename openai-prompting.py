@@ -14,15 +14,6 @@ observation_select_temp = 0.5
 code_verifier_gen_temp = 0.8
 
 
-# Make sure this comes before accessing the environment variable.
-load_dotenv()
-
-# Set your OpenAI API key
-api_key = os.getenv('OPENAI_API_KEY')
-
-if api_key is None:
-    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
-
 # Initialize OpenAI client
 client = OpenAI()
 
