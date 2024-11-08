@@ -10,6 +10,8 @@ import json
 import base64
 import requests
 from PIL import Image, ImageDraw
+from dotenv import load_dotenv
+load_dotenv()  # Make sure this comes before accessing the environment variable.
 
 # Set your OpenAI API key
 api_key = os.getenv('OPENAI_API_KEY')
@@ -208,13 +210,11 @@ def classify_observations(observations):
     yes_observations = []
     no_observations = []
     for i in range(0, len(observations), max_observations_per_call):
-        print(len(no_observations))
-        print("^ amt of no observations (please be >0 lmfao)")
         batch = observations[i:i+max_observations_per_call]
-        content_text = (
+        content_text = ( #for some reason this guy does not wanna say no. like, to anything. bro literally said yes to every single one of the 256 ones even though hes trash at implementing. ig we're making him say no. smh my head LOL
             "Given the following observations about the transformations, please determine whether one could easily make "
             "very, very well-defined and correct code that could verify that these observations are indeed true for the given examples "
-            "(you should be saying No for at least a quarter of these observations). "
+            "(make sure you say no for at least a quarter of these observations - if you run out of things to say no to, say no to the observations that would be really tedious to implement). "
             "For each observation, answer 'Yes' if code could easily verify it, or 'No' if not. "
             "Create a compilation of the 'Yes's into a Python list called 'yes_observations', and the 'No's into a Python list called 'no_observations'. Return only these lists."
         )
