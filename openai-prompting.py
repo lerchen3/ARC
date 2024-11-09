@@ -1,4 +1,4 @@
-#Controls
+# Controls
 max_search_depth = 100
 observation_gen_temp = 1.1
 observation_classify_temp = 0.5
@@ -11,7 +11,6 @@ import base64
 import requests
 from PIL import Image, ImageDraw
 from dotenv import load_dotenv
-
 
 load_dotenv()  # Make sure this comes before accessing the environment variable.
 
@@ -27,7 +26,7 @@ with open('arc-agi_evaluation_challenges.json', 'r') as f:
 
 # Color mapping, including color 10 for the arrow
 arc_agi_colors = {
-    0: "#000000",  # Black
+    0: "#FFFFFF",  # White
     1: "#0074D9",  # Blue
     2: "#FF4136",  # Red
     3: "#2ECC40",  # Green
@@ -37,10 +36,10 @@ arc_agi_colors = {
     7: "#FF851B",  # Orange
     8: "#7FDBFF",  # Cyan
     9: "#B10DC9",  # Brown
-    10: "#FFFFFF"  # White for arrow
+    10: "#000000"  # Black for arrow
 }
 
-# Function to create the transformation image
+# Function to create the transformation image with modifications
 def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     # Scale up the grids
     w_in = len(input_grid[0]) * scaling_factor
@@ -49,45 +48,103 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
     w_out = len(output_grid[0]) * scaling_factor
     h_out = len(output_grid) * scaling_factor
 
+    # Border settings
+    border_width = scaling_factor * 1
+    border_color = "#000000"  # Black
+
     # Compute dimensions based on the instructions
     arrow_width = (w_in + w_out) // 2
-    total_width = w_in + w_out + 20 + arrow_width
-    total_height = max(h_in, h_out)
+    total_width = w_in + w_out + 20 + arrow_width + 4 * border_width
+    total_height = max(h_in, h_out) + 2 * border_width
 
     # Create a new image with the computed dimensions
     img = Image.new('RGB', (total_width, total_height), color=arc_agi_colors[0])
     draw = ImageDraw.Draw(img)
 
-    # Draw the input grid centered on the left side
-    x_in = 0
+    # Positions for the input grid
+    x_in = border_width
     y_in = (total_height - h_in) // 2
+
+    # Draw the input grid cells
     for i, row in enumerate(input_grid):
         for j, cell in enumerate(row):
-            color = arc_agi_colors.get(cell, "#000000")
+            color = arc_agi_colors.get(cell, "#FFFFFF")
             x0 = x_in + j * scaling_factor
             y0 = y_in + i * scaling_factor
             x1 = x0 + scaling_factor
             y1 = y0 + scaling_factor
             draw.rectangle([x0, y0, x1, y1], fill=color)
 
-    # Draw the output grid centered on the right side
-    x_out = w_in + 20 + arrow_width
+    # Draw borders around the input grid
+    # Left border
+    draw.rectangle([
+        x_in - border_width, y_in - border_width,
+        x_in, y_in + h_in + border_width
+    ], fill=border_color)
+
+    # Top border
+    draw.rectangle([
+        x_in, y_in - border_width,
+        x_in + w_in, y_in
+    ], fill=border_color)
+
+    # Right border
+    draw.rectangle([
+        x_in + w_in, y_in - border_width,
+        x_in + w_in + border_width, y_in + h_in + border_width
+    ], fill=border_color)
+
+    # Bottom border
+    draw.rectangle([
+        x_in, y_in + h_in,
+        x_in + w_in, y_in + h_in + border_width
+    ], fill=border_color)
+
+    # Positions for the output grid
+    x_out = x_in + w_in + 2 * border_width + 20 + arrow_width
     y_out = (total_height - h_out) // 2
+
+    # Draw the output grid cells
     for i, row in enumerate(output_grid):
         for j, cell in enumerate(row):
-            color = arc_agi_colors.get(cell, "#000000")
+            color = arc_agi_colors.get(cell, "#FFFFFF")
             x0 = x_out + j * scaling_factor
             y0 = y_out + i * scaling_factor
             x1 = x0 + scaling_factor
             y1 = y0 + scaling_factor
             draw.rectangle([x0, y0, x1, y1], fill=color)
 
+    # Draw borders around the output grid
+    # Left border
+    draw.rectangle([
+        x_out - border_width, y_out - border_width,
+        x_out, y_out + h_out + border_width
+    ], fill=border_color)
+
+    # Top border
+    draw.rectangle([
+        x_out, y_out - border_width,
+        x_out + w_out, y_out
+    ], fill=border_color)
+
+    # Right border
+    draw.rectangle([
+        x_out + w_out, y_out - border_width,
+        x_out + w_out + border_width, y_out + h_out + border_width
+    ], fill=border_color)
+
+    # Bottom border
+    draw.rectangle([
+        x_out, y_out + h_out,
+        x_out + w_out, y_out + h_out + border_width
+    ], fill=border_color)
+
     # Draw the arrow between input and output grids
-    x_arrow_start = w_in + 10
-    x_arrow_end = x_out - 10
+    x_arrow_start = x_in + w_in + border_width + 10
+    x_arrow_end = x_out - border_width - 10
     y_arrow = total_height // 2
-    arrow_height = 20  # Adjusted for better visibility
-    arrowhead_depth = 30  # Adjusted for better visibility
+    arrow_height = 2  # Good visibility at this height
+    arrowhead_depth = 3 * scaling_factor  # Adjusted for scaling factor
 
     # Draw the arrow shaft
     draw.rectangle(
@@ -109,32 +166,34 @@ def create_transformation_image(input_grid, output_grid, scaling_factor=10):
 def grid_to_python_literal(grid):
     return repr(grid)
 
+#================================================================================================
+# Don't touch above this line
+#================================================================================================
+
 # Function to generate observations
 def generate_observations(num_observations, examples, additional_context=None):
-    # Adjust the number of observations per call to stay within token limits
-    max_observations_per_call = 50  # Adjusted for token limits
+    max_observations_per_call = 30  # Adjusted for token limits
     total_observations = []
     observations_remaining = num_observations
+    attempts = 0
+    max_attempts = num_observations * 2  # To prevent infinite loops
 
-    while observations_remaining > 0:
+    while observations_remaining > 0 and attempts < max_attempts:
         observations_to_request = min(observations_remaining, max_observations_per_call)
         # Construct the prompt
         content_text = (
-            f"Please analyze the transformations shown in the following examples and provide {observations_to_request} observations about the nature of the transformations, the input grids, or the output grids. "
-            "Bottom line, help me understand the input, the output, and the transformation from just natural language. "
-            "Try to be very, very, very, very, very insightful! "
-            "Return only the list of observations in valid JSON format."
+            f"Study the input and output grids and provide {observations_to_request} key insights. "
+            "Notice both the direct changes and any underlying patterns. "
+            "Consider relationships between elements, spatial arrangements, quantity changes, preservation rules, "
+            "and how groups of elements interact with each other and empty spaces. "
+            "Describe what you discover in plain language. "
+            "Return a chain of thought about the nature of the input, output, and the transformation, as well as a python list of the discoveries as strings."
         )
         if additional_context:
             content_text += additional_context
 
         # Prepare the messages for the API
-        messages = [
-            {
-                "role": "user",
-                "content": content_text
-            }
-        ]
+        messages = [{"role": "user", "content": content_text}]
 
         # Add examples
         for idx, example in enumerate(examples):
@@ -143,25 +202,22 @@ def generate_observations(num_observations, examples, additional_context=None):
             input_literal = grid_to_python_literal(input_grid)
             output_literal = grid_to_python_literal(output_grid)
             base64_image = example.get('base64_image', None)
-            messages.append(
-                {
-                    "role": "user",
-                    "content": f"Example {idx+1}:"
-                }
-            )
+            messages.append({"role": "user", "content": f"Example {idx+1}:"})
             if base64_image:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": f"![Example {idx+1}](data:image/png;base64,{base64_image})"
-                    }
-                )
-            messages.append(
-                {
+                messages.append({
                     "role": "user",
-                    "content": f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\nHere's what color each number corresponds to. 0: Black, 1: Blue, 2: Red, 3: Green, 4: Yellow, 5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown."
-                }
-            )
+                    "content": f"![Example {idx+1}](data:image/png;base64,{base64_image})"
+                })
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Python Representation:\nInput Grid:\n{input_literal}\nOutput Grid:\n{output_literal}\n"
+                    "Here's what color each number corresponds to. 0: Blank, 1: Blue, 2: Red, 3: Green, 4: Yellow, "
+                    "5: Gray, 6: Magenta, 7: Orange, 8: Cyan, 9: Brown. (Note in the image I provide, there is an "
+                    "automatically generated 1-block wide black border to delineate the grids properly. Don't consider "
+                    "this in the transformation.)"
+                )
+            })
 
         headers = {
             "Content-Type": "application/json",
@@ -176,49 +232,53 @@ def generate_observations(num_observations, examples, additional_context=None):
             "temperature": observation_gen_temp
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
-
         observations = []
 
-        # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                response_content = response_content.strip()
-                # Find the first '[' and last ']' to extract the JSON array
-                start_index = response_content.find('[')
-                end_index = response_content.rfind(']') + 1
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
-                if start_index == -1 or end_index == -1:
-                    print("Could not find JSON array in the response.")
-                    return total_observations
+            if response.status_code == 200:
+                completion = response.json()
+                response_content = completion['choices'][0]['message']['content']
+                try:
+                    response_content = response_content.strip()
+                    start_index = response_content.find('[')
+                    end_index = response_content.rfind(']') + 1
 
-                json_str = response_content[start_index:end_index]
-                observations = json.loads(json_str)
-                total_observations.extend(observations)
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-                return total_observations
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
-            return total_observations
+                    if start_index == -1 or end_index == -1:
+                        print("Could not find JSON array in the response.")
+                    else:
+                        json_str = response_content[start_index:end_index]
+                        observations = json.loads(json_str)
+                        total_observations.extend(observations)
+                except Exception as e:
+                    print(f"Error processing GPT-4 response: {e}")
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+        except Exception as e:
+            print(f"Exception during API call: {e}")
 
-        observations_remaining -= observations_to_request
+        # Adjust counts
+        observations_received = len(observations)
+        observations_remaining -= observations_received
+        attempts += 1
+
+    if observations_remaining > 0:
+        print(f"Warning: Could not generate the requested number of observations. Generated {num_observations - observations_remaining} observations.")
 
     return total_observations
 
 # Function to classify observations into 'yes' and 'no'
 def classify_observations(observations):
-    # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
     yes_observations = []
     no_observations = []
+
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
         content_text = (
@@ -230,14 +290,8 @@ def classify_observations(observations):
         )
 
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" + json.dumps(batch, indent=2)}
         ]
 
         headers = {
@@ -253,36 +307,38 @@ def classify_observations(observations):
             "temperature": observation_classify_temp
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
-        # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                local_vars = {}
-                exec(response_content, {}, local_vars)
-                yes_batch = local_vars.get('yes_observations', [])
-                no_batch = local_vars.get('no_observations', [])
-                yes_observations.extend(yes_batch)
-                no_observations.extend(no_batch)
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+            if response.status_code == 200:
+                completion = response.json()
+                response_content = completion['choices'][0]['message']['content']
+                try:
+                    local_vars = {}
+                    exec(response_content, {}, local_vars)
+                    yes_batch = local_vars.get('yes_observations', [])
+                    no_batch = local_vars.get('no_observations', [])
+                    yes_observations.extend(yes_batch)
+                    no_observations.extend(no_batch)
+                except Exception as e:
+                    print(f"Error processing GPT-4 response: {e}")
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+        except Exception as e:
+            print(f"Exception during API call: {e}")
 
     return yes_observations, no_observations
 
 # Function to select best observations
 def select_best_observations(observations, num_best, context):
-    # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
     selected_observations = []
+
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
         content_text = (
@@ -291,14 +347,8 @@ def select_best_observations(observations, num_best, context):
         )
 
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" + json.dumps(batch, indent=2)}
         ]
 
         headers = {
@@ -314,35 +364,36 @@ def select_best_observations(observations, num_best, context):
             "temperature": observation_select_temp
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
-        # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                local_vars = {}
-                exec(response_content, {}, local_vars)
-                best_batch = local_vars.get('best_observations', [])
-                selected_observations.extend(best_batch)
-                if len(selected_observations) >= num_best:
-                    return selected_observations[:num_best]
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+            if response.status_code == 200:
+                completion = response.json()
+                response_content = completion['choices'][0]['message']['content']
+                try:
+                    local_vars = {}
+                    exec(response_content, {}, local_vars)
+                    best_batch = local_vars.get('best_observations', [])
+                    selected_observations.extend(best_batch)
+                    if len(selected_observations) >= num_best:
+                        return selected_observations[:num_best]
+                except Exception as e:
+                    print(f"Error processing GPT-4 response: {e}")
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+        except Exception as e:
+            print(f"Exception during API call: {e}")
 
     return selected_observations[:num_best]
 
 # Function to generate code verifiers for observations
 def generate_code_verifiers_for_block(observations_block, examples):
     observations_with_code = {}
-    # Adjusted number of observations per call to stay within token limits
     max_observations_per_call = 20  # Adjusted for token limits
 
     for i in range(0, len(observations_block), max_observations_per_call):
@@ -354,16 +405,10 @@ def generate_code_verifiers_for_block(observations_block, examples):
             "Implement a soundproof code. "
             "Provide 4 different implementations for each observation."
         )
-        # Prepare the messages
+
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" + json.dumps(batch, indent=2)}
         ]
 
         headers = {
@@ -379,34 +424,33 @@ def generate_code_verifiers_for_block(observations_block, examples):
             "temperature": code_verifier_gen_temp
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
-        # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
-                # Parse the response to extract code verifiers for each observation
-                # Assuming the response is a JSON object mapping observations to code implementations
-                code_verifiers = json.loads(response_content)
-                for observation in batch:
-                    if observation in code_verifiers:
-                        observations_with_code[observation] = code_verifiers[observation]
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+            if response.status_code == 200:
+                completion = response.json()
+                response_content = completion['choices'][0]['message']['content']
+                try:
+                    code_verifiers = json.loads(response_content)
+                    for observation in batch:
+                        if observation in code_verifiers:
+                            observations_with_code[observation] = code_verifiers[observation]
+                except Exception as e:
+                    print(f"Error processing GPT-4 response: {e}")
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+        except Exception as e:
+            print(f"Exception during API call: {e}")
 
     return observations_with_code
 
 # Function to generate code for difficult observations
 def generate_code_for_difficult_observations(no_observations, examples):
-    # Function to generate code verifiers for difficult observations
     observations_with_code = {}
     for observation in no_observations:
         content_text = (
@@ -419,16 +463,10 @@ def generate_code_for_difficult_observations(no_observations, examples):
             "Be careful that the code verifies exactly the natural language description. "
             "Implement sound and robust code."
         )
-        # Prepare the messages
+
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": f"Observation:\n{observation}"
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": f"Observation:\n{observation}"}
         ]
 
         # Include examples
@@ -442,12 +480,7 @@ def generate_code_for_difficult_observations(no_observations, examples):
                 f"\nExample {idx+1}:\nInput Grid:\n{input_literal}\n"
                 f"Output Grid:\n{output_literal}\n"
             )
-        messages.append(
-            {
-                "role": "user",
-                "content": f"Examples:{examples_text}"
-            }
-        )
+        messages.append({"role": "user", "content": f"Examples:{examples_text}"})
 
         headers = {
             "Content-Type": "application/json",
@@ -462,24 +495,23 @@ def generate_code_for_difficult_observations(no_observations, examples):
             "temperature": code_verifier_gen_temp
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
 
-        # Process the response
-        if response.status_code == 200:
-            completion = response.json()
-            response_content = completion['choices'][0]['message']['content']
-            try:
+            if response.status_code == 200:
+                completion = response.json()
+                response_content = completion['choices'][0]['message']['content']
                 code_str = response_content.strip()
                 observations_with_code[observation] = code_str
-            except Exception as e:
-                print(f"Error processing GPT-4 response: {e}")
-        else:
-            print(f"Error: {response.status_code}")
-            print(response.text)
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+        except Exception as e:
+            print(f"Exception during API call: {e}")
 
     return observations_with_code
 
@@ -530,9 +562,13 @@ for task_id, task in arc_tasks.items():
         num_observations=256,
         examples=examples_with_images
     )
+    print("INITIAL 256 OBSERVATIONS")
+    print(observations)
 
     # Classify observations into 'yes' and 'no'
     yes_observations, no_observations = classify_observations(observations)
+    print("Yes Observations:", yes_observations)
+    print("No Observations:", no_observations)
 
     # Select the 16 best 'yes' observations
     best_yes_observations = select_best_observations(
