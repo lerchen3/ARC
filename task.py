@@ -82,6 +82,17 @@ class Task:
         """Create a Task instance from a dictionary representation."""
         return cls(task_id, task_data['train'], task_data['test'], generate_images)
 
+    def __getitem__(self, key):
+        # Enable dictionary-style access
+        if key == 'train':
+            return self.train_examples
+        elif key == 'test':
+            return self.test_examples
+        elif key == 'task_id':
+            return self.task_id
+        else:
+            raise KeyError(f"'{key}' not found in Task")
+
 
 class TaskDatasetInstance:
     def __init__(self, file_path: str = DEFAULT_FILE_PATH):

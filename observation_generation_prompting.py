@@ -1,18 +1,20 @@
 import json
 import re
+from search import OBSERVATION_GEN_TEMP
 from pprint import pprint
-
+from dotenv import load_dotenv
+load_dotenv() 
 from openai import OpenAI
 
 from prompting_utils import grid_to_python_literal
 from task import Task, TaskDataset, get_task
 
-observation_gen_temp = 1.1
 
 
 def generate_observation_prompt(
         num_observations: int,
-        task: Task
+        task: Task,
+        additional_context: str = ""
 ) -> list[dict]:
     """
     Generate a prompt for generating observations about a task.
@@ -23,21 +25,27 @@ def generate_observation_prompt(
         The number of observations to generate.
     task: Task
         The task to generate observations about.
+    additional_context: str, optional
+        Additional context or instructions to guide the observation generation. Used to refine existing observations.
 
     Returns:
     -------
-        An OpenAI message history. The current implementation only uses one message,
-        but for future-proofing, we return a list of messages.
+        An OpenAI message history.
     """
+    base_prompt = (
+        f"Please provide {num_observations} observations about "
+        f"the nature of the transformations, the input grids, or "
+        f"the output grids. Output your observations as a numbered "
+        f"list."
+    )
+    
+    # Combine base prompt with additional context if provided
+    full_prompt = base_prompt + additional_context
+
     content = [
         {
             "type": "text",
-            "text": (
-                f"Please provide {num_observations} observations about "
-                f"the nature of the transformations, the input grids, or "
-                f"the output grids. Output your observations as a numbered "
-                f"list."
-            )
+            "text": full_prompt
         }
     ]
     for example in task.examples_with_images:
@@ -166,7 +174,8 @@ def generate_observations(
         num_observations: int,
         task: Task,
         verbose: bool = False,
-        max_observations_per_call: int = 10
+        max_observations_per_call: int = 10,
+        additional_context: str = ""
 ) -> list[str]:
     """
     Generate observations about a task.
@@ -191,6 +200,8 @@ def generate_observations(
         The number of observations to generate.
     task: Task
         The task to generate observations about.
+    additional_context: str, optional
+        Additional context or instructions to guide the observation generation; used when refining observations.
     """
 
     # Construct the prompt
@@ -201,7 +212,8 @@ def generate_observations(
     messages.extend(
         generate_observation_prompt(
             num_observations=max_observations_per_call,
-            task=task
+            task=task,
+            additional_context=additional_context  # Pass the additional context
         )
     )
 
@@ -215,7 +227,7 @@ def generate_observations(
         messages=messages,
         max_tokens=2048,
         n=num_observations // max_observations_per_call,
-        temperature=observation_gen_temp
+        temperature=OBSERVATION_GEN_TEMP
     )
 
     observations = []
