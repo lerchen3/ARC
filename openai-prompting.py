@@ -17,10 +17,10 @@ client = OpenAI()
 
 
 def classify_observations(observations):
-    # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
     yes_observations = []
     no_observations = []
+
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
         content_text = (
@@ -32,14 +32,9 @@ def classify_observations(observations):
         )
 
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" +
+                json.dumps(batch, indent=2)}
         ]
 
         # Make the API call using the OpenAI client
@@ -69,9 +64,9 @@ def classify_observations(observations):
 
 
 def select_best_observations(observations, num_best, context):
-    # Adjust the number of observations per call to stay within token limits
     max_observations_per_call = 50  # Adjusted for token limits
     selected_observations = []
+
     for i in range(0, len(observations), max_observations_per_call):
         batch = observations[i:i+max_observations_per_call]
         content_text = (
@@ -80,14 +75,9 @@ def select_best_observations(observations, num_best, context):
         )
 
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" +
+                json.dumps(batch, indent=2)}
         ]
 
         # Make the API call using the OpenAI client
@@ -118,7 +108,6 @@ def select_best_observations(observations, num_best, context):
 
 def generate_code_verifiers_for_block(observations_block, examples):
     observations_with_code = {}
-    # Adjusted number of observations per call to stay within token limits
     max_observations_per_call = 20  # Adjusted for token limits
 
     for i in range(0, len(observations_block), max_observations_per_call):
@@ -130,16 +119,11 @@ def generate_code_verifiers_for_block(observations_block, examples):
             "Implement a soundproof code. "
             "Provide 4 different implementations for each observation."
         )
-        # Prepare the messages
+
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": "Observations:\n" + json.dumps(batch, indent=2)
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": "Observations:\n" +
+                json.dumps(batch, indent=2)}
         ]
 
         # Make the API call using the OpenAI client
@@ -169,7 +153,6 @@ def generate_code_verifiers_for_block(observations_block, examples):
 
 
 def generate_code_for_difficult_observations(no_observations, examples):
-    # Function to generate code verifiers for difficult observations
     observations_with_code = {}
     for observation in no_observations:
         content_text = (
@@ -182,16 +165,10 @@ def generate_code_for_difficult_observations(no_observations, examples):
             "Be careful that the code verifies exactly the natural language description. "
             "Implement sound and robust code."
         )
-        # Prepare the messages
+
         messages = [
-            {
-                "role": "user",
-                "content": content_text
-            },
-            {
-                "role": "user",
-                "content": f"Observation:\n{observation}"
-            }
+            {"role": "user", "content": content_text},
+            {"role": "user", "content": f"Observation:\n{observation}"}
         ]
 
         # Include examples
@@ -206,11 +183,7 @@ def generate_code_for_difficult_observations(no_observations, examples):
                 f"Output Grid:\n{output_literal}\n"
             )
         messages.append(
-            {
-                "role": "user",
-                "content": f"Examples:{examples_text}"
-            }
-        )
+            {"role": "user", "content": f"Examples:{examples_text}"})
 
         # Make the API call using the OpenAI client
         completion = client.chat.completions.create(
