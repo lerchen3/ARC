@@ -31,7 +31,7 @@ def create_transformation_image(
     output_grid: list[list[int]],
     save_location: Optional[str] = None,
     cache: bool = True,
-    return_base64: bool = False,
+    return_base64: bool = True,
 ) -> Optional[str]:
     """
     Given two grids, create a matplotlib figure showing the transformation between them.
@@ -44,11 +44,11 @@ def create_transformation_image(
         The output grid.
     save_location: Optional[str]
         The location to save the figure. If not provided, the figure
-        will be saved to a unique filename based on the input and output grids.  
+        will be saved to a unique filename based on the input and output grids.
     cache: bool
         Whether to use cached figures. Defaults to True.
     return_base64: bool
-        Whether to return the figure as a base64 string. Defaults to False. 
+        Whether to return the figure as a base64 string. Defaults to False.
     """
     os.makedirs("task_images", exist_ok=True)
     if save_location is None:
@@ -135,37 +135,13 @@ def main():
     """
     Test the functions.
     """
-    test_input = [[0, 7, 7], [7, 7, 7], [0, 7, 7]]
-    test_output = [
-        [0, 0, 0, 0, 7, 7, 0, 7, 7],
-        [0, 0, 0, 7, 7, 7, 7, 7, 7],
-        [0, 0, 0, 0, 7, 7, 0, 7, 7],
-        [0, 7, 7, 0, 7, 7, 0, 7, 7],
-        [7, 7, 7, 7, 7, 7, 7, 7, 7],
-        [0, 7, 7, 0, 7, 7, 0, 7, 7],
-        [0, 0, 0, 0, 7, 7, 0, 7, 7],
-        [0, 0, 0, 7, 7, 7, 7, 7, 7],
-        [0, 0, 0, 0, 7, 7, 0, 7, 7]
-    ]
-    create_transformation_image(test_input, test_output)
-
-    test_input_2 = [
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 3, 0, 0, 0],
-        [0, 3, 0, 3, 0, 0],
-        [0, 0, 3, 0, 3, 0],
-        [0, 0, 0, 3, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
-    test_output_2 = [
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 3, 0, 0, 0],
-        [0, 3, 4, 3, 0, 0],
-        [0, 0, 3, 4, 3, 0],
-        [0, 0, 0, 3, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
-    create_transformation_image(test_input_2, test_output_2)
+    from task import get_task
+    task = get_task('arc-agi_training_challenges.json',
+                    '007bbfb7', generate_images=False)
+    test_input = task.train_examples[0]['input']
+    test_output = task.train_examples[0]['output']
+    create_transformation_image(test_input, test_output,
+                                save_location='test_image.png')
 
 
 if __name__ == "__main__":
