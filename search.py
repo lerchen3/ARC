@@ -1,12 +1,9 @@
 import os
-
 from openai import OpenAI
-import json
-from prompting_utils import grid_to_python_literal
+from dotenv import load_dotenv
 from task import TaskDataset
 from vision_prompting import create_transformation_image
 from observation_generation_prompting import generate_observations
-from dotenv import load_dotenv
 from observation_verification_prompting import process_and_verify_observations
 from observation_classification_prompting import classify_observations
 from observation_selection_prompting import select_best_observations

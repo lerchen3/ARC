@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from FSP_DATA.observation_selection import FSP_RAW
 
-OBSERVATION_SELECT_TEMP = 0.2
+SELECTION_GEN_TEMP = 0.2
 
 
 def generate_selection_prompt(
@@ -68,7 +68,7 @@ def select_best_observations(
         model="gpt-4-turbo-preview",
         messages=messages,
         max_tokens=1024,
-        temperature=OBSERVATION_SELECT_TEMP
+        temperature=SELECTION_GEN_TEMP
     )
 
     try:

@@ -1,9 +1,10 @@
 import json
 from openai import OpenAI
-from search import OBSERVATION_CLASSIFY_TEMP
 from dotenv import load_dotenv
 from FSP_DATA.observation_classification import FSP_RAW
 load_dotenv()
+
+CLASSIFICATION_GEN_TEMP = 0.0
 
 def generate_classification_prompt(observations: list[str]) -> list[dict]:
     """
@@ -69,7 +70,7 @@ def classify_observations(
         model="gpt-4o-mini",
         messages=messages,
         max_tokens=1024,
-        temperature=OBSERVATION_CLASSIFY_TEMP
+        temperature=CLASSIFICATION_GEN_TEMP
     )
 
     try:
