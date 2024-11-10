@@ -2,30 +2,10 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 load_dotenv()
+from FSP_DATA.observation_selection import FSP_RAW
 
 OBSERVATION_SELECT_TEMP = 0.2
 
-# Example FSP data for selection
-FSP_RAW = [
-    {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "007bbfb7",
-        "observations": [
-            "The grid size remains constant",
-            "Blue pixels become red",
-            "The pattern shows symmetry",
-            "Corners remain unchanged",
-            "The transformation is reversible"
-        ],
-        "context": "about color transformations",
-        "num_best": 3,
-        "selected_observations": [
-            "Blue pixels become red",
-            "The grid size remains constant",
-            "Corners remain unchanged"
-        ]
-    }
-]
 
 def generate_selection_prompt(
     observations: list[str],

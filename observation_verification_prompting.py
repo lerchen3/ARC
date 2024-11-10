@@ -3,52 +3,61 @@ from openai import OpenAI
 from typing import List, Dict, Union
 from dotenv import load_dotenv
 from prompting_utils import grid_to_python_literal
+from FSP_DATA.verification_regular import FSP_RAW_REGULAR
+from FSP_DATA.verification_difficult import FSP_RAW_DIFFICULT
 
 load_dotenv()
 
-CODE_VERIFIER_GEN_TEMP = 0.8
-
-# Example FSP data for verification
-FSP_RAW = [
-    {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "007bbfb7",
-        "input_grid": [[0, 1, 0], [1, 0, 1], [0, 1, 0]],
-        "output_grid": [[0, 2, 0], [2, 0, 2], [0, 2, 0]],
-        "observation": "All blue pixels (color 1) are replaced with red pixels (color 2)",
-        "verification_code": """
-def verify(input_grid, output_grid):
-    import numpy as np
-    input_arr = np.array(input_grid)
-    output_arr = np.array(output_grid)
-    return np.all((input_arr == 1) == (output_arr == 2))
-"""
-    }
-]
+VERIFICATION_GEN_TEMP = 1.0
 
 def generate_verification_prompt(
     observation: str,
     input_grid: List[List[int]],
-    output_grid: List[List[int]]
+    output_grid: List[List[int]],
+    difficult_to_verify: bool = False
 ) -> list[dict]:
     """Generate a prompt for creating verification code."""
-    content = (
+    base_content = (
         "Generate Python code to verify this observation about a grid transformation:\n"
         f"Observation: {observation}\n\n"
         f"Input grid:\n{grid_to_python_literal(input_grid)}\n\n"
         f"Output grid:\n{grid_to_python_literal(output_grid)}\n\n"
+    )
+    
+    if difficult_to_verify:
+        content = (
+            "This observation is particularly complex and challenging to verify. "
+            "As a top-tier Python expert, I need you to implement a robust and precise "
+            "verification function that handles all edge cases.\n\n"
+        ) + base_content
+    else:
+        content = base_content
+        
+    content += (
         "Write a function named 'verify' that takes input_grid and output_grid as parameters "
         "and returns True if the observation holds, False otherwise. Use numpy if needed."
     )
     
     return [{"role": "user", "content": content}]
 
-def generate_fsp_context(fsp_data: list[dict]) -> list[dict]:
+def generate_fsp_context(
+    fsp_data_regular: list[dict],
+    fsp_data_difficult: list[dict],
+    difficult_to_verify: bool = False
+) -> list[dict]:
     system_prompt = (
         "You are an expert Python programmer specializing in grid transformation verification. "
-        "Your task is to write precise verification functions that test specific observations "
-        "about grid transformations."
     )
+    
+    if difficult_to_verify:
+        system_prompt += (
+            "You excel at implementing complex verification logic for challenging "
+            "observations that require sophisticated algorithmic approaches. "
+            "Your code should be both precise and comprehensive."
+        )
+        fsp_data = fsp_data_difficult
+    else:
+        fsp_data = fsp_data_regular
     
     messages = [{"role": "system", "content": system_prompt}]
     
@@ -57,7 +66,8 @@ def generate_fsp_context(fsp_data: list[dict]) -> list[dict]:
             generate_verification_prompt(
                 example['observation'],
                 example['input_grid'],
-                example['output_grid']
+                example['output_grid'],
+                difficult_to_verify
             )
         )
         messages.append({
@@ -67,19 +77,29 @@ def generate_fsp_context(fsp_data: list[dict]) -> list[dict]:
     
     return messages
 
-FSP_CONTEXT = generate_fsp_context(FSP_RAW)
-
 def generate_verification_code(
     client: OpenAI,
     observation: str,
     input_grid: List[List[int]],
     output_grid: List[List[int]],
+    difficult_to_verify: bool = False,
     verbose: bool = False
 ) -> str:
     """Generate verification code for an observation."""
     messages = []
-    messages.extend(FSP_CONTEXT)
-    messages.extend(generate_verification_prompt(observation, input_grid, output_grid))
+    messages.extend(generate_fsp_context(
+        fsp_data_regular=FSP_RAW_REGULAR,
+        fsp_data_difficult=FSP_RAW_DIFFICULT,
+        difficult_to_verify=difficult_to_verify
+    ))
+    messages.extend(
+        generate_verification_prompt(
+            observation,
+            input_grid,
+            output_grid,
+            difficult_to_verify
+        )
+    )
 
     if verbose:
         print("Messages:")
@@ -87,10 +107,10 @@ def generate_verification_code(
         pprint(messages)
 
     completion = client.chat.completions.create(
-        model="gpt-4-turbo-preview",
+        model="gpt-4o-mini",
         messages=messages,
         max_tokens=1024,
-        temperature=CODE_VERIFIER_GEN_TEMP
+        temperature=VERIFICATION_GEN_TEMP
     )
 
     return completion.choices[0].message.content

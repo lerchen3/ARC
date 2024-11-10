@@ -2,31 +2,8 @@ import json
 from openai import OpenAI
 from search import OBSERVATION_CLASSIFY_TEMP
 from dotenv import load_dotenv
+from FSP_DATA.observation_classification import FSP_RAW
 load_dotenv()
-
-# Example FSP data for classification
-FSP_RAW = [
-    {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "007bbfb7",
-        "observations": [
-            "The grid dimensions remain unchanged after transformation",
-            "All blue pixels (color 1) are replaced with red pixels (color 2)",
-            "The pattern exhibits rotational symmetry",
-            "The transformation preserves the total number of colored cells"
-        ],
-        "classification": {
-            "yes_observations": [
-                "The grid dimensions remain unchanged after transformation",
-                "All blue pixels (color 1) are replaced with red pixels (color 2)"
-            ],
-            "no_observations": [
-                "The pattern exhibits rotational symmetry",
-                "The transformation preserves the total number of colored cells"
-            ]
-        }
-    }
-]
 
 def generate_classification_prompt(observations: list[str]) -> list[dict]:
     """
