@@ -76,7 +76,7 @@ def generate_fsp_context(
         })
     
     return messages
-
+ 
 def generate_verification_code(
     client: OpenAI,
     observation: str,

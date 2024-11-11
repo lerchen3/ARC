@@ -61,17 +61,18 @@ yes_observations, no_observations = classify_observations(observations)
 
 # Select the 16 best 'yes' observations
 best_yes_observations = select_best_observations(
-    yes_observations,
-    16,
-    'crucial to understanding the transformation'
+    client=client,
+    observations=yes_observations,
+    num_best=16,
+    easy_to_verify=True
 )
 
 # Select the 16 best 'no' observations
 best_no_observations = select_best_observations(
-    no_observations,
-    16,
-    ('not easily verifiable by code but, if explored further, '
-        'could provide valuable insights')
+    client=client,
+    observations=no_observations,
+    num_best=16,
+    easy_to_verify=False
 )
 
 # Initialize observations and 'no's lists

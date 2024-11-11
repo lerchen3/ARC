@@ -1,4 +1,4 @@
-FSP_RAW = [
+FSP_RAW_REGULAR = [
     {
         "file_path": "arc-agi_training_challenges.json",
         "task_id": "007bbfb7",
@@ -9,7 +9,6 @@ FSP_RAW = [
             "Corners remain unchanged",
             "The transformation is reversible"
         ],
-        "context": "about color transformations",
         "num_best": 3,
         "selected_observations": [
             "Blue pixels become red",
