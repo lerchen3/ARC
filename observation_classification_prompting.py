@@ -1,3 +1,11 @@
+# CURRENTLY WORKING
+# Possible future: Literally just look for keywords and classify by that  
+# or use a classification neural network or whatever, 
+# I don't think this step is actually that hard.
+# (then again, gpt-4o-mini is minimal compute anyway)
+# OR: Tell 4o-mini to actually generate a reason for its classification, and pass
+# that on to verification context (probably not necessary though).
+
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -79,11 +87,10 @@ def classify_observations(
             print("Response:")
             print(response_content)
             
-        local_vars = {}
-        exec(response_content, {}, local_vars)
+        response_dict = json.loads(response_content)
         return (
-            local_vars.get('yes_observations', []),
-            local_vars.get('no_observations', [])
+            response_dict.get('yes_observations', []),
+            response_dict.get('no_observations', [])
         )
     except Exception as e:
         print(f"Error processing response: {e}")

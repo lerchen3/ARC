@@ -1,3 +1,6 @@
+# DESCRIPTION: Example verification code for "hard to verify" observations; only used at end of searching
+# (probably will delete).
+
 FSP_RAW_DIFFICULT = [
     {
         "file_path": "arc-agi_training_challenges.json",

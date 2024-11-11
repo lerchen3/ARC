@@ -1,9 +1,8 @@
-# DESCRIPTION: Example questions for breaking down observations into verifiable components.
+# DESCRIPTION: Example questions for breaking down observations into refinable components.
 
 FSP_RAW = [
     {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "007bbfb7",
+        # 007bbfb7
         "observation": "**Pattern Consistency**: The final pattern in each sequence preserves some spatial characteristics of the initial pattern. This suggests that the transformation rule might involve a local duplication or scaling within each block of the original grid.",
         "questions": [
             "Does the transformation involve exact duplication of any part of the input pattern?",
@@ -14,8 +13,7 @@ FSP_RAW = [
         ]
     },
     {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "212895b5",
+        # 212895b5
         "observation": "**Symmetrical Expansion**: The pattern expansion in the final images is symmetrical, suggesting that the transformation rules apply equally in each direction from the center.",
         "questions": [
             "Is the symmetry perfectly mirrored across both horizontal and vertical axes?",
@@ -26,8 +24,7 @@ FSP_RAW = [
         ]
     },
     {
-        "file_path": "arc-agi_evaluation_challenges.json",
-        "task_id": "pattern_growth",
+        # 212895b5
         "observation": "**Pattern Growth**: In all sequences, the central pattern grows into a larger configuration that includes arms extending diagonally outward.",
         "questions": [
             "Is the diagonal growth pattern consistent in all examples?",

@@ -1,3 +1,5 @@
+# DESCRIPTION: "Easy to verify" observation selection from gpt-4.
+
 FSP_RAW_REGULAR = [
     {
         "observations": [

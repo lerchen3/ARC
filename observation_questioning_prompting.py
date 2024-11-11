@@ -2,6 +2,7 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 from FSP_DATA.observation_questioning import FSP_RAW
+import re
 load_dotenv()
 
 QUESTIONING_GEN_TEMP = 0.7
@@ -78,17 +79,24 @@ def generate_questions(
         temperature=QUESTIONING_GEN_TEMP
     )
 
-    try:
-        response_content = completion.choices[0].message.content
+    questions = []
+    if verbose:
+        print("Responses:")
+    for response in completion.choices:
+        response_content = response.message.content
         if verbose:
-            print("Response:")
             print(response_content)
-            
-        questions = json.loads(response_content)
-        return questions[:num_questions]
-    except Exception as e:
-        print(f"Error processing response: {e}")
-        return []
+        for line in response_content.split('\n'):
+            # Match numbered questions (e.g., "1. What is...?" or "1) What is...?")
+            match = re.match(r'^\s*(\d+)[\.\)]\s*(.+)$', line)
+            if match:
+                questions.append(match.group(2))
+
+    if verbose:
+        print("\nExtracted Questions:")
+        pprint(questions)
+        
+    return questions[:num_questions]
 
 def main():
     """Test the questioning system."""

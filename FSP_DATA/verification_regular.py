@@ -1,3 +1,5 @@
+# DESCRIPTION: Example verification code for "easy to verify" observations.
+
 FSP_RAW_REGULAR = [
     {
         "file_path": "arc-agi_training_challenges.json",

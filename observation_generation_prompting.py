@@ -1,3 +1,6 @@
+# CURRENTLY WORKING
+# TODO: Add guidance here to not have overlap between rollouts.
+
 import re
 from pprint import pprint
 from dotenv import load_dotenv

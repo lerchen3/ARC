@@ -1,4 +1,5 @@
 # DESCRIPTION: Initial observations generated from gpt-4.
+
 FSP_RAW_OBSERVATION_GEN = [
     {
         "file_path": "arc-agi_training_challenges.json",
