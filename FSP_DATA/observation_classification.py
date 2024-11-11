@@ -1,7 +1,5 @@
 FSP_RAW = [
     {
-        "file_path": "arc-agi_training_challenges.json",
-        "task_id": "007bbfb7",
         "observations": [
             "The grid dimensions remain unchanged after transformation",
             "All blue pixels (color 1) are replaced with red pixels (color 2)",
