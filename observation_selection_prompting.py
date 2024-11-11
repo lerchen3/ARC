@@ -1,9 +1,13 @@
+# CURRENTLY WORKING
+
 import json
 from openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
 from FSP_DATA.observation_selection_regular import FSP_RAW_REGULAR
 from FSP_DATA.observation_selection_difficult import FSP_RAW_DIFFICULT
 
-SELECTION_GEN_TEMP = 0.2
+SELECTION_GEN_TEMP = 0.0
 
 def generate_selection_prompt(
     observations: list[str],
@@ -15,7 +19,7 @@ def generate_selection_prompt(
         content = (
             f"From these observations, select the {num_best} that provide the most "
             f"concrete and verifiable features of the transformation. Focus on "
-            f"observations that describe specific, measurable changes.\n\n"
+            f"observations that describe specific, measurable features.\n\n"
             f"Observations:\n{json.dumps(observations, indent=2)}"
         )
     else:
@@ -107,3 +111,35 @@ def select_best_observations(
     except Exception as e:
         print(f"Error processing response: {e}")
         return [] 
+    
+def main():
+    """Test the observation selection system."""
+    client = OpenAI()
+    
+    test_observations = [
+        "**Pattern Consistency**: The final pattern in each sequence preserves some "
+        "spatial characteristics of the initial pattern. This suggests that the "
+        "transformation rule might involve a local duplication or scaling within "
+        "each block of the original grid.",
+        "**Color Retention**: The transformation maintains consistent color usage "
+        "throughout each sequence. Each color present in the initial pattern remains "
+        "consistent in the final pattern.",
+        "**Spatial Connectivity**: Some colored regions maintain relative proximity "
+        "to their positions in the input grids, forming linked patterns in the output grids."
+    ]
+    
+    selected = select_best_observations(
+        client=client,
+        observations=test_observations,
+        num_best=2,
+        verbose=True,
+        easy_to_verify=True
+    )
+    
+    print("\nSelected Observations:")
+    print("---------------------")
+    for i, observation in enumerate(selected, 1):
+        print(f"{i}. {observation}")
+
+if __name__ == "__main__":
+    main()

@@ -23,7 +23,7 @@ task_id = task_ids[57]
 print(task_id)
 task = arc_tasks.get_task(task_id)
 print(f"Processing task {task_id}")
-num_examples = task.num_examples
+num_examples = task['num_examples']
 
 # Now, generate observations
 # List to store examples with images
@@ -33,7 +33,7 @@ examples_with_images = []
 os.makedirs('task_images', exist_ok=True)
 
 # Create images for each example and collect them
-for idx, example in enumerate(task.train):
+for idx, example in enumerate(task['train']):
     input_grid = example['input']
     output_grid = example['output']
 
@@ -53,19 +53,27 @@ for idx, example in enumerate(task.train):
     examples_with_images.append(example_with_image)
 
 observations = generate_observations(
+    client=client,
     num_observations=256,
-    examples=examples_with_images
+    task=task,
+    verbose=False,
+    additional_context=""
 )
 
 # Classify observations into 'yes' and 'no'
-yes_observations, no_observations = classify_observations(observations)
+yes_observations, no_observations = classify_observations(
+    client=client,
+    observations=observations,
+    verbose=False
+)
 
 # Select the 16 best 'yes' observations
 best_yes_observations = select_best_observations(
     client=client,
     observations=yes_observations,
     num_best=16,
-    easy_to_verify=True
+    easy_to_verify=True,
+    verbose=False
 )
 
 # Select the 16 best 'no' observations
@@ -73,7 +81,8 @@ best_no_observations = select_best_observations(
     client=client,
     observations=no_observations,
     num_best=16,
-    easy_to_verify=False
+    easy_to_verify=False,
+    verbose=False
 )
 
 # Initialize observations and 'no's lists
@@ -106,24 +115,34 @@ for search_depth in range(1, MAX_SEARCH_DEPTH+1):
         
         # Generate observations with the enhanced context
         observations = generate_observations(
+            client=client,
             num_observations=16,
-            examples=examples_with_images,
+            task=task,
+            verbose=False,
             additional_context=additional_context
         )
         
         # Classify observations
-        yes_obs, no_obs = classify_observations(observations)
+        yes_obs, no_obs = classify_observations(
+            client=client,
+            observations=observations,
+            verbose=False
+        )
         
         # Select best observations
         best_yes_obs = select_best_observations(
-            yes_obs, 16,
-            ('easily verifiable by code and crucial to understanding '
-                'the transformation')
+            client=client,
+            observations=yes_obs,
+            num_best=16,
+            easy_to_verify=True,
+            verbose=False
         )
         best_no_obs = select_best_observations(
-            no_obs, 16,
-            ('not easily verifiable by code but, if explored further, '
-                'could provide valuable insights')
+            client=client,
+            observations=no_obs,
+            num_best=16,
+            easy_to_verify=False,
+            verbose=False
         )
         
         # Add to lists
@@ -133,19 +152,20 @@ for search_depth in range(1, MAX_SEARCH_DEPTH+1):
 
 # Process and verify regular observations
 valid_observations = process_and_verify_observations(
-    client,
-    observations_list,
-    examples_with_images,
-    task
+    client=client,
+    observations=observations_list,
+    examples=examples_with_images,
+    task=task,
+    is_difficult=False
 )
 
 # Process and verify difficult observations
 print("\nProcessing difficult observations:")
 valid_difficult_observations = process_and_verify_observations(
-    client,
-    nos_list,
-    examples_with_images,
-    task,
+    client=client,
+    observations=nos_list,
+    examples=examples_with_images,
+    task=task,
     is_difficult=True
 )
 

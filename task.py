@@ -90,6 +90,8 @@ class Task:
             return self.test_examples
         elif key == 'task_id':
             return self.task_id
+        elif key == 'num_examples':
+            return self.num_examples
         else:
             raise KeyError(f"'{key}' not found in Task")
 
