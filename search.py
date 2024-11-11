@@ -7,6 +7,7 @@ from observation_generation_prompting import generate_observations
 from observation_verification_prompting import process_and_verify_observations
 from observation_classification_prompting import classify_observations
 from observation_selection_prompting import select_best_observations
+from observation_questioning_prompting import generate_questions
 
 MAX_SEARCH_DEPTH = 100
 
@@ -87,19 +88,32 @@ for search_depth in range(1, MAX_SEARCH_DEPTH+1):
     new_observations = []
     new_nos = []
     for no_observation in nos_list:
-        # Generate observations branching from this 'no' observation
-        additional_context = (
-            f"\nHere's an observation I made. For all of the observations "
-            f"you give, please refine this observation in some way, whether "
-            f"by elaboration, correction, or modification:\n{no_observation}"
+        # Generate questions for this observation
+        questions = generate_questions(
+            client=client,
+            observation=no_observation,
+            num_questions=5
         )
+        
+        # Create additional context combining the original observation and questions
+        questions_context = "\n".join([f"- {q}" for q in questions])
+        additional_context = (
+            f"Here's an observation I made. For all of the observations "
+            f"you give, please address these specific questions about the observation:\n"
+            f"{questions_context}\n\n"
+            f"Original observation:\n{no_observation}"
+        )
+        
+        # Generate observations with the enhanced context
         observations = generate_observations(
             num_observations=16,
             examples=examples_with_images,
             additional_context=additional_context
         )
+        
         # Classify observations
         yes_obs, no_obs = classify_observations(observations)
+        
         # Select best observations
         best_yes_obs = select_best_observations(
             yes_obs, 16,
@@ -111,6 +125,7 @@ for search_depth in range(1, MAX_SEARCH_DEPTH+1):
             ('not easily verifiable by code but, if explored further, '
                 'could provide valuable insights')
         )
+        
         # Add to lists
         observations_list.extend(best_yes_obs)
         new_nos.extend(best_no_obs)
