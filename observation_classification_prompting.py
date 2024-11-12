@@ -15,23 +15,15 @@ load_dotenv()
 CLASSIFICATION_GEN_TEMP = 0.0
 
 def generate_classification_prompt(observations: list[str]) -> list[dict]:
-    """
-    Generate a prompt for classifying observations.
-    
-    Parameters:
-    ----------
-    observations: list[str]
-        List of observations to classify
-        
-    Returns:
-    -------
-        An OpenAI message history.
-    """
+    """Generate a prompt for classifying observations with reasoning."""
     content = (
         "Given these observations about grid transformations, determine which ones "
-        "could be easily verified with code (answer 'Yes') and which ones would be "
-        "difficult to verify (answer 'No'). Return two Python lists: 'yes_observations' "
-        "and 'no_observations'.\n\n"
+        "could be easily verified with code, i.e. having a clear, well-defined criteria "
+        "(answer 'Yes'), and which ones would be difficult to verify, i.e. abstract and "
+        "challenging to algorithmically verify (answer 'No'). For each observation, "
+        "provide a brief explanation of why it can or cannot be easily verified. "
+        "Return a Python dictionary with 'response' containing both the classifications "
+        "and their reasoning.\n\n"
         f"Observations:\n{json.dumps(observations, indent=2)}"
     )
     
@@ -63,8 +55,8 @@ def classify_observations(
     client: OpenAI,
     observations: list[str],
     verbose: bool = False
-) -> tuple[list[str], list[str]]:
-    """Main function to classify observations into verifiable and non-verifiable."""
+) -> tuple[list[dict], list[dict]]:
+    """Main function to classify observations with reasoning."""
     messages = []
     messages.extend(FSP_CONTEXT)
     messages.extend(generate_classification_prompt(observations))
@@ -89,8 +81,8 @@ def classify_observations(
             
         response_dict = json.loads(response_content)
         return (
-            response_dict.get('yes_observations', []),
-            response_dict.get('no_observations', [])
+            response_dict.get('response', {}).get('yes_observations', []),
+            response_dict.get('response', {}).get('no_observations', [])
         )
     except Exception as e:
         print(f"Error processing response: {e}")
