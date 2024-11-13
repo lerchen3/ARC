@@ -44,7 +44,7 @@ def generate_fsp_context(fsp_data: list[dict]) -> list[dict]:
         )
         messages.append({
             "role": "assistant",
-            "content": json.dumps(example['classification'])
+            "content": json.dumps(example['response'])
         })
     
     return messages

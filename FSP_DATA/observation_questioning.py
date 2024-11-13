@@ -14,17 +14,6 @@ FSP_RAW = [
     },
     {
         # 212895b5
-        "observation": "**Symmetrical Expansion**: The pattern expansion in the final images is symmetrical, suggesting that the transformation rules apply equally in each direction from the center.",
-        "questions": [
-            "Is the symmetry perfectly mirrored across both horizontal and vertical axes?",
-            "Does the expansion maintain equal distances from the center in all directions?",
-            "Are there specific colors that maintain symmetrical relationships?",
-            "Does the symmetrical expansion follow a consistent mathematical ratio?",
-            "Are there any asymmetrical elements that break the overall pattern?"
-        ]
-    },
-    {
-        # 212895b5
         "observation": "**Pattern Growth**: In all sequences, the central pattern grows into a larger configuration that includes arms extending diagonally outward.",
         "questions": [
             "Is the diagonal growth pattern consistent in all examples?",

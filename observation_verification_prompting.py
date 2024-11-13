@@ -1,73 +1,41 @@
+# CURRENTLY WORKING
+
 import json
 from openai import OpenAI
 from typing import List, Dict, Union
 from dotenv import load_dotenv
 from prompting_utils import grid_to_python_literal
-from FSP_DATA.verification_regular import FSP_RAW_REGULAR
-from FSP_DATA.verification_difficult import FSP_RAW_DIFFICULT
+from FSP_DATA.observation_verification import FSP_RAW
 
 load_dotenv()
 
-VERIFICATION_GEN_TEMP = 1.0
+VERIFICATION_GEN_TEMP = 0.0
 
 def generate_verification_prompt(
     observation: str,
-    input_grid: List[List[int]],
-    output_grid: List[List[int]],
-    difficult_to_verify: bool = False
 ) -> list[dict]:
     """Generate a prompt for creating verification code."""
-    base_content = (
+    content = (
         "Generate Python code to verify this observation about a grid transformation:\n"
         f"Observation: {observation}\n\n"
-        f"Input grid:\n{grid_to_python_literal(input_grid)}\n\n"
-        f"Output grid:\n{grid_to_python_literal(output_grid)}\n\n"
-    )
-    
-    if difficult_to_verify:
-        content = (
-            "This observation is particularly complex and challenging to verify. "
-            "As a top-tier Python expert, I need you to implement a robust and precise "
-            "verification function that handles all edge cases.\n\n"
-        ) + base_content
-    else:
-        content = base_content
-        
-    content += (
         "Write a function named 'verify' that takes input_grid and output_grid as parameters "
-        "and returns True if the observation holds, False otherwise. Use numpy if needed."
+        "and returns True if the observation holds, False otherwise. Use standard python libraries "
+        "like numpy if needed." 
     )
     
     return [{"role": "user", "content": content}]
 
-def generate_fsp_context(
-    fsp_data_regular: list[dict],
-    fsp_data_difficult: list[dict],
-    difficult_to_verify: bool = False
-) -> list[dict]:
+def generate_fsp_context(fsp_data_regular: list[dict]) -> list[dict]:
     system_prompt = (
         "You are an expert Python programmer specializing in grid transformation verification. "
     )
     
-    if difficult_to_verify:
-        system_prompt += (
-            "You excel at implementing complex verification logic for challenging "
-            "observations that require sophisticated algorithmic approaches. "
-            "Your code should be both precise and comprehensive."
-        )
-        fsp_data = fsp_data_difficult
-    else:
-        fsp_data = fsp_data_regular
-    
     messages = [{"role": "system", "content": system_prompt}]
     
-    for example in fsp_data:
+    for example in fsp_data_regular:
         messages.extend(
             generate_verification_prompt(
-                example['observation'],
-                example['input_grid'],
-                example['output_grid'],
-                difficult_to_verify
+                example['observation']
             )
         )
         messages.append({
@@ -76,28 +44,18 @@ def generate_fsp_context(
         })
     
     return messages
- 
+
 def generate_verification_code(
     client: OpenAI,
     observation: str,
-    input_grid: List[List[int]],
-    output_grid: List[List[int]],
-    difficult_to_verify: bool = False,
     verbose: bool = False
 ) -> str:
     """Generate verification code for an observation."""
     messages = []
-    messages.extend(generate_fsp_context(
-        fsp_data_regular=FSP_RAW_REGULAR,
-        fsp_data_difficult=FSP_RAW_DIFFICULT,
-        difficult_to_verify=difficult_to_verify
-    ))
+    messages.extend(generate_fsp_context(fsp_data_regular=FSP_RAW))
     messages.extend(
         generate_verification_prompt(
             observation,
-            input_grid,
-            output_grid,
-            difficult_to_verify
         )
     )
 
@@ -113,19 +71,46 @@ def generate_verification_code(
         temperature=VERIFICATION_GEN_TEMP
     )
 
-    return completion.choices[0].message.content
+    response = completion.choices[0].message.content
+    
+    if verbose:
+        print(f"Response: {response}")
+    # Extract code from the response
+    code = extract_code_from_response(response)
+    
+    if verbose:
+        print(f"Verification code: {code}")
+    
+    return code
+
+def extract_code_from_response(response: str) -> str:
+    """Extract Python code from a response that may contain markdown or explanations."""
+    # Look for code between Python code fence markers
+    import re
+    code_pattern = r"```(?:python)?\s*(.*?)```"
+    matches = re.findall(code_pattern, response, re.DOTALL)
+    
+    if matches:
+        return matches[0].strip()
+    
+    # Fallback: If no code blocks found, return the whole response
+    return response.strip()
 
 def verify_observation(
     verification_code: str,
-    input_grid: List[List[int]],
-    output_grid: List[List[int]]
+    examples: List[Dict]
 ) -> bool:
     """Execute verification code and return result."""
     try:
         local_vars = {}
         exec(verification_code, {}, local_vars)
         verify_func = local_vars['verify']
-        return verify_func(input_grid, output_grid)
+        
+        # Check if observation holds for all examples
+        for example in examples:
+            if not verify_func(example['input'], example['output']):
+                return False
+        return True
     except Exception as e:
         print(f"Error executing verification code: {e}")
         return False
@@ -133,40 +118,37 @@ def verify_observation(
 def process_and_verify_observations(
     client: OpenAI,
     observations: List[str],
-    input_grid: List[List[int]],
-    output_grid: List[List[int]],
+    examples: List[Dict],
     verbose: bool = False
 ) -> Dict[str, bool]:
     """Process and verify multiple observations."""
     results = {}
     for observation in observations:
         verification_code = generate_verification_code(
-            client, observation, input_grid, output_grid, verbose
+            client, observation, verbose
         )
-        result = verify_observation(verification_code, input_grid, output_grid)
+        result = verify_observation(verification_code, examples)
         results[observation] = result
     return results
 
 def main():
-    """Test the verification system with task 00d62c1b."""
+    """Test the verification system."""
     from task import get_task
     
     client = OpenAI()
-    task = get_task('arc-agi_training_challenges.json', '00d62c1b')
+    task = get_task('arc-agi_evaluation_challenges.json', '212895b5')
     
-    input_grid = task.train[0]['input']
-    output_grid = task.train[0]['output']
+    examples = task['train']
     
     test_observations = [
-        "The grid dimensions double in both width and height",
-        "Each 2x2 block in the output contains exactly one colored cell"
+        "The grid dimensions remain the same in the input and output grids",
+        "There is always a 3x3 block of blue (represented by 8) cells in the input grid and output grid, in the same position in both grids."
     ]
     
     results = process_and_verify_observations(
         client=client,
         observations=test_observations,
-        input_grid=input_grid,
-        output_grid=output_grid,
+        examples=examples,
         verbose=True
     )
     
@@ -174,7 +156,7 @@ def main():
     print("--------------------")
     for obs, result in results.items():
         print(f"Observation: {obs}")
-        print(f"Verified: {'✓' if result else '✗'}\n")
+        print(f"Verified: {'YES' if result else 'no'}\n")
 
 if __name__ == "__main__":
     main()

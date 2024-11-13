@@ -1,8 +1,7 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from task import TaskDataset
-from vision_prompting import create_transformation_image
+from task import TaskDataset, get_task
 from observation_generation_prompting import generate_observations
 from observation_verification_prompting import process_and_verify_observations
 from observation_classification_prompting import classify_observations
@@ -16,56 +15,32 @@ load_dotenv()
 # Initialize OpenAI client
 client = OpenAI()
 
-arc_tasks = TaskDataset('arc-agi_evaluation_challenges.json')
+# Get task using the factory function
+task = get_task('arc-agi_evaluation_challenges.json', '212895b5')
+print(f"Processing task {task['task_id']}")
 
-task_ids = arc_tasks.keys()
-task_id = task_ids[57]
-print(task_id)
-task = arc_tasks.get_task(task_id)
-print(f"Processing task {task_id}")
-num_examples = task['num_examples']
-
-# Now, generate observations
-# List to store examples with images
-examples_with_images = []
-
-# Ensure the 'task_images' directory exists
-os.makedirs('task_images', exist_ok=True)
-
-# Create images for each example and collect them
-for idx, example in enumerate(task['train']):
-    input_grid = example['input']
-    output_grid = example['output']
-
-    # Create the image representing the transformation
-    image_filename = f"task_images/{task_id}_{idx+1}.png"
-
-    base64_image = create_transformation_image(
-        input_grid, output_grid, save_location=image_filename,
-        cache=True, return_base64=True)
-
-    # Add the base64 image to the example
-    example_with_image = {
-        'input': input_grid,
-        'output': output_grid,
-        'base64_image': base64_image
-    }
-    examples_with_images.append(example_with_image)
-
-observations = generate_observations(
-    client=client,
-    num_observations=256,
-    task=task,
-    verbose=False,
-    additional_context=""
-)
+# Generate initial observations
+try:
+    observations = generate_observations(
+        client=client,
+        num_observations=256,
+        task=task)
+    print(f"Generated {len(observations)} initial observations")
+except Exception as e:
+    print(f"Error generating observations: {e}")
+    observations = []
 
 # Classify observations into 'yes' and 'no'
-yes_observations, no_observations = classify_observations(
-    client=client,
-    observations=observations,
-    verbose=False
-)
+try:
+    yes_observations, no_observations = classify_observations(
+        client=client,
+        observations=observations,
+        verbose=True
+    )
+    print(f"Classified {len(yes_observations)} yes observations and {len(no_observations)} no observations")
+except Exception as e:
+    print(f"Error classifying observations: {e}")
+    yes_observations, no_observations = [], []
 
 # Select the 16 best 'yes' observations
 best_yes_observations = select_best_observations(
@@ -150,31 +125,16 @@ for search_depth in range(1, MAX_SEARCH_DEPTH+1):
         new_nos.extend(best_no_obs)
     nos_list = new_nos
 
-# Process and verify regular observations
-valid_observations = process_and_verify_observations(
+# Process and verify observations
+verified_observations = process_and_verify_observations(
     client=client,
     observations=observations_list,
-    examples=examples_with_images,
-    task=task,
-    is_difficult=False
+    examples=task['train'],
+    verbose=False
 )
-
-# Process and verify difficult observations
-print("\nProcessing difficult observations:")
-valid_difficult_observations = process_and_verify_observations(
-    client=client,
-    observations=nos_list,
-    examples=examples_with_images,
-    task=task,
-    is_difficult=True
-)
-
-# Combine all valid observations
-all_valid_observations = valid_observations + valid_difficult_observations
 
 # Print the valid observations with code verifiers
-print("\nValid Observations:")
-for observation, code_dict in all_valid_observations:
+print("\nVerified Observations:")
+for observation, is_valid in verified_observations.items():
     print(f"\nObservation: {observation}")
-    for code_verifier_name, code_str in code_dict.items():
-        print(f"{code_verifier_name}:\n{code_str}\n")
+    print(f"Valid: {is_valid}")
