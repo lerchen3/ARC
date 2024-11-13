@@ -192,7 +192,7 @@ def generate_observations(
         model="gpt-4o-mini",
         messages=messages,
         max_tokens=2048,
-        n=num_observations // max_observations_per_call,
+        n=num_observations // max_observations_per_call + 1,
         temperature=OBSERVATION_GEN_TEMP
     )
 
@@ -208,6 +208,8 @@ def generate_observations(
             if match:
                 observations.append(match.group(2))
 
+    observations = observations[:num_observations]
+    
     if verbose:
         print("Observations:")
         pprint(observations)
@@ -224,7 +226,7 @@ def main():
     client = OpenAI()
     generate_observations(
         client=client,
-        num_observations=10,
+        num_observations=256,
         task=task,
         verbose=True
     )

@@ -35,7 +35,7 @@ try:
     yes_observations, no_observations = classify_observations(
         client=client,
         observations=observations,
-        verbose=True
+        verbose=False
     )
     print(f"Classified {len(yes_observations)} yes observations and {len(no_observations)} no observations")
 except Exception as e:

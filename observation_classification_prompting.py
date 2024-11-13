@@ -54,7 +54,8 @@ FSP_CONTEXT = generate_fsp_context(FSP_RAW)
 def classify_observations(
     client: OpenAI,
     observations: list[str],
-    verbose: bool = False
+    verbose: bool = False,
+    max_observations_per_call: int = 10
 ) -> tuple[list[dict], list[dict]]:
     """Main function to classify observations with reasoning."""
     messages = []
