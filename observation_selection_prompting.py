@@ -76,7 +76,7 @@ def select_best_observations(
     client: OpenAI,
     observations: list[str],
     num_best: int,
-    easy_to_verify: bool = True,
+    easy_to_verify: bool,
     verbose: bool = False
 ) -> list[str]:
     """Main function to select the best observations."""
@@ -86,10 +86,14 @@ def select_best_observations(
         fsp_data_difficult=FSP_RAW_DIFFICULT,
         easy_to_verify=easy_to_verify
     ))
-    messages.extend(generate_selection_prompt(observations, num_best, easy_to_verify))
+    messages.extend(generate_selection_prompt(
+        observations=observations,
+        num_best=num_best,
+        easy_to_verify=easy_to_verify
+    ))
 
     if verbose:
-        print("Messages:")
+        print("\nMessages:")
         from pprint import pprint
         pprint(messages)
 
@@ -106,12 +110,12 @@ def select_best_observations(
             print("Response:")
             print(response_content)
             
-        selected = json.loads(response_content)
+        selected = eval(response_content)
         return selected[:num_best]
     except Exception as e:
         print(f"Error processing response: {e}")
-        return [] 
-    
+        return observations[:num_best]  # Return first num_best observations as fallback
+
 def main():
     """Test the observation selection system."""
     client = OpenAI()
@@ -131,7 +135,7 @@ def main():
     selected = select_best_observations(
         client=client,
         observations=test_observations,
-        num_best=2,
+        num_best=1,
         verbose=True,
         easy_to_verify=True
     )

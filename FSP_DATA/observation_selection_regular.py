@@ -1,4 +1,5 @@
 # DESCRIPTION: "Easy to verify" observation selection from gpt-4.
+# TODO: make these sample observations much better & representative(just take them from refined)
 
 FSP_RAW_REGULAR = [
     {
@@ -7,9 +8,8 @@ FSP_RAW_REGULAR = [
             "**Color Retention**: The transformation maintains consistent color usage throughout each sequence. Each color present in the initial pattern remains consistent in the final pattern, suggesting that the transformation rules are color-independent.",
             "**Zero Dominance**: The black color (represented by 0) occupies a significant portion of the output grids, serving as a background while colored elements are embedded within it to create patterns.",
         ],
-        "num_best": 2,
+        "num_best": 1,
         "selected_observations": [
-            "**Expansion of Dimensions**: Each transformation results in an output grid with larger dimensions, 3 times wider and taller in the examples shown, indicating spatial expansion.",
             "**Color Retention**: The transformation maintains consistent color usage throughout each sequence. Each color present in the initial pattern remains consistent in the final pattern, suggesting that the transformation rules are color-independent.",
         ]
     },

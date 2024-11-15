@@ -1,4 +1,5 @@
 # DESCRIPTION: "Hard to verify" observation selection from gpt-4.
+# TODO: make these sample observations much better & representative(just take them from refined)
 
 FSP_RAW_DIFFICULT = [
     {

@@ -3,8 +3,6 @@
 # or use a classification neural network or whatever, 
 # I don't think this step is actually that hard.
 # (then again, gpt-4o-mini is minimal compute anyway)
-# OR: Tell 4o-mini to actually generate a reason for its classification, and pass
-# that on to verification context (probably not necessary though).
 
 import json
 from openai import OpenAI
@@ -58,36 +56,60 @@ def classify_observations(
     max_observations_per_call: int = 10
 ) -> tuple[list[dict], list[dict]]:
     """Main function to classify observations with reasoning."""
-    messages = []
-    messages.extend(FSP_CONTEXT)
-    messages.extend(generate_classification_prompt(observations))
+    all_yes_observations = []
+    all_no_observations = []
+    
+    # Split observations into batches
+    for i in range(0, len(observations), max_observations_per_call):
+        batch = observations[i:min(i + max_observations_per_call, len(observations))]
+        
+        messages = []
+        messages.extend(FSP_CONTEXT)
+        messages.extend(generate_classification_prompt(batch))
+
+        if verbose:
+            print(f"\nProcessing batch {i//max_observations_per_call + 1}")
+            print("Messages:")
+            from pprint import pprint
+            pprint(messages)
+
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=1024,
+            temperature=CLASSIFICATION_GEN_TEMP
+        )
+
+        try:
+            response_content = completion.choices[0].message.content
+            if verbose:
+                print(f"Batch {i//max_observations_per_call + 1} response_content:")
+                print(response_content)
+            
+            # Clean the response before parsing
+            cleaned_response = clean_response(response_content)
+            response_dict = json.loads(cleaned_response)
+            
+            batch_yes = response_dict.get('response', {}).get('yes_observations', [])
+            batch_no = response_dict.get('response', {}).get('no_observations', [])
+            
+            all_yes_observations.extend(batch_yes)
+            all_no_observations.extend(batch_no)
+            
+        except Exception as e:
+            print(f"Error processing batch {i//max_observations_per_call + 1}: {e}")
+            # Add the failed batch to no_observations with error reason
+            for obs in batch:
+                all_no_observations.append({
+                    "observation": obs,
+                    "reason": f"Failed to classify due to error: {str(e)}"
+                })
 
     if verbose:
-        print("Messages:")
-        from pprint import pprint
-        pprint(messages)
+        print(f"\nTotal observations processed: {len(all_yes_observations) + len(all_no_observations)}")
+        print(f"Expected observations: {len(observations)}")
 
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        max_tokens=1024,
-        temperature=CLASSIFICATION_GEN_TEMP
-    )
-
-    try:
-        response_content = completion.choices[0].message.content
-        if verbose:
-            print("Response:")
-            print(response_content)
-            
-        response_dict = json.loads(response_content)
-        return (
-            response_dict.get('response', {}).get('yes_observations', []),
-            response_dict.get('response', {}).get('no_observations', [])
-        )
-    except Exception as e:
-        print(f"Error processing response: {e}")
-        return [], []
+    return all_yes_observations, all_no_observations
 
 def main():
     """Test the classification system with task 00d62c1b."""
@@ -101,7 +123,7 @@ def main():
         "All cells maintain their original colors",
         "The pattern shows aesthetic balance",
         "Each 2x2 block in the output contains exactly one colored cell"
-    ]
+    ] * 64
     
     yes_observations, no_observations = classify_observations(
         client=client,
@@ -118,6 +140,14 @@ def main():
     print("\nNot Easily Verifiable Observations:")
     for obs in no_observations:
         print(f"- {obs}")
+
+def clean_response(response_content: str) -> str:
+    """Extract just the JSON content we need."""
+    start = response_content.find('"response": {')
+    if start == -1:
+        raise ValueError("Could not find 'response': { in API response")
+    
+    return '{' + response_content[start:]
 
 if __name__ == "__main__":
     main()
