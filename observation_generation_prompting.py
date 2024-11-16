@@ -6,7 +6,7 @@ from pprint import pprint
 from dotenv import load_dotenv
 load_dotenv() 
 from openai import OpenAI
-from prompting_utils import grid_to_python_literal
+from prompting_utils import grid_to_python_literal, format_additional_context
 from task import Task, TaskDataset, get_task
 from FSP_DATA.observation_gen_regular import FSP_RAW_OBSERVATION_GEN
 from FSP_DATA.observation_gen_refinement import FSP_RAW_REFINEMENT
@@ -16,7 +16,8 @@ OBSERVATION_GEN_TEMP = 0.8
 def generate_observation_prompt(
         num_observations: int,
         task: Task,
-        additional_context: str = ""
+        questions: list[str],
+        original_observation: str = ""
 ) -> list[dict]:
     """
     Generate a prompt for generating observations about a task.
@@ -27,26 +28,24 @@ def generate_observation_prompt(
         The number of observations to generate.
     task: Task
         The task to generate observations about.
-    additional_context: str, optional
-        Additional context or instructions to guide the observation generation. Used to refine existing observations.
-
+    questions: list[str], optional
+        Questions about base observation
+    
     Returns:
     -------
         An OpenAI message history.
     """
-    if additional_context:
-        base_prompt = (
-            "I will give you a transformation idea to refine and explore further. "
-            f"Please provide {num_observations} detailed observations that specifically "
-            f"examine and build upon this idea: {additional_context}\n\n"
-            f"Output your refined observations as a numbered list."
-        )
-    else:
-        base_prompt = (
-            f"Please provide {num_observations} observations about "
-            f"the nature of the transformations, the input grids, or "
-            f"the output grids. Output your observations as a numbered "
-            f"list."
+    base_prompt = (
+        f"Please provide {num_observations} observations about "
+        f"the nature of the transformations, the input grids, or "
+        f"the output grids. Output your observations as a numbered "
+        f"list."
+    )
+
+    if questions:
+        base_prompt += format_additional_context(
+            questions=questions,
+            original_observation=original_observation
         )
 
     content = [
@@ -55,6 +54,7 @@ def generate_observation_prompt(
             "text": base_prompt
         }
     ]
+
     for example in task.examples_with_images:
         base64_image = example['base64_image']
         input_literal = grid_to_python_literal(example['input'])
@@ -116,11 +116,13 @@ def generate_fsp_context(
     messages = [{"role": "system", "content": system_prompt}]
 
     for example in fsp_data:
+        num_observations = example.get('observations_to_generate', 10)
         messages.extend(
             generate_observation_prompt(
-                num_observations=example['observations_to_generate'],
+                num_observations=num_observations,
                 task=get_task(example['file_path'], example['task_id']),
-                additional_context=example.get('additional_context', '')
+                questions=example.get('questions', ''),
+                original_observation=example.get('original_observation', '')
             )
         )
         messages.append({
@@ -137,7 +139,8 @@ def generate_observations(
         task: Task,
         verbose: bool = False,
         max_observations_per_call: int = 10,
-        additional_context: str = ""
+        questions: str = "",
+        original_observation: str = ""
 ) -> list[str]:
     """
     Generate observations about a task.
@@ -162,7 +165,7 @@ def generate_observations(
         The number of observations to generate.
     task: Task
         The task to generate observations about.
-    additional_context: str, optional
+    questions: str, optional
         Additional context or instructions to guide the observation generation; used when refining observations.
     """
 
@@ -172,14 +175,15 @@ def generate_observations(
     messages.extend(generate_fsp_context(
         fsp_data_regular=FSP_RAW_OBSERVATION_GEN,
         fsp_data_refinement=FSP_RAW_REFINEMENT,
-        is_refinement=bool(additional_context)
+        is_refinement=bool(questions)
     ))
 
     messages.extend(
         generate_observation_prompt(
             num_observations=max_observations_per_call,
             task=task,
-            additional_context=additional_context  # Pass the additional context
+            questions=questions,
+            original_observation=original_observation
         )
     )
 

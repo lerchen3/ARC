@@ -128,6 +128,7 @@ def process_and_verify_observations(
             client, observation, verbose
         )
         result = verify_observation(verification_code, examples)
+        print(f"result of {observation}: {result}")
         results[observation] = result
     return results
 

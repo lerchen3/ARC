@@ -54,7 +54,7 @@ def classify_observations(
     observations: list[str],
     verbose: bool = False,
     max_observations_per_call: int = 10
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[str], list[str]]:
     """Main function to classify observations with reasoning."""
     all_yes_observations = []
     all_no_observations = []
@@ -90,20 +90,17 @@ def classify_observations(
             cleaned_response = clean_response(response_content)
             response_dict = json.loads(cleaned_response)
             
-            batch_yes = response_dict.get('response', {}).get('yes_observations', [])
-            batch_no = response_dict.get('response', {}).get('no_observations', [])
+            # Extract just the observation strings from the dictionaries
+            batch_yes = [obs['observation'] for obs in response_dict.get('response', {}).get('yes_observations', [])]
+            batch_no = [obs['observation'] for obs in response_dict.get('response', {}).get('no_observations', [])]
             
             all_yes_observations.extend(batch_yes)
             all_no_observations.extend(batch_no)
             
         except Exception as e:
             print(f"Error processing batch {i//max_observations_per_call + 1}: {e}")
-            # Add the failed batch to no_observations with error reason
-            for obs in batch:
-                all_no_observations.append({
-                    "observation": obs,
-                    "reason": f"Failed to classify due to error: {str(e)}"
-                })
+            # Add the failed batch to no_observations
+            all_no_observations.extend(batch)
 
     if verbose:
         print(f"\nTotal observations processed: {len(all_yes_observations) + len(all_no_observations)}")
@@ -123,7 +120,7 @@ def main():
         "All cells maintain their original colors",
         "The pattern shows aesthetic balance",
         "Each 2x2 block in the output contains exactly one colored cell"
-    ] * 64
+    ]
     
     yes_observations, no_observations = classify_observations(
         client=client,
@@ -146,8 +143,8 @@ def clean_response(response_content: str) -> str:
     start = response_content.find('"response": {')
     if start == -1:
         raise ValueError("Could not find 'response': { in API response")
-    
-    return '{' + response_content[start:]
+    end = response_content.rfind('}')
+    return '{' + response_content[start:end+1]
 
 if __name__ == "__main__":
     main()

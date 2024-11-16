@@ -110,11 +110,22 @@ def select_best_observations(
             print("Response:")
             print(response_content)
             
-        selected = eval(response_content)
+        # Extract content between first [ and last ]
+        start = response_content.find('[')
+        end = response_content.rfind(']') + 1
+        if start == -1 or end == 0:
+            raise ValueError("No list found in response")
+            
+        list_content = response_content[start:end]
+        
+        from ast import literal_eval
+        selected = literal_eval(list_content)
+        
         return selected[:num_best]
     except Exception as e:
         print(f"Error processing response: {e}")
-        return observations[:num_best]  # Return first num_best observations as fallback
+        print(f"Raw response content: {response_content}")
+        return observations[:num_best]
 
 def main():
     """Test the observation selection system."""

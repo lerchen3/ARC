@@ -42,19 +42,15 @@ try:
 except Exception as e:
     print(f"Error classifying observations: {e}")
 
-# Randomly shuffle yes_observations
 random.shuffle(yes_observations)
-
-print(f"yes_observations: {yes_observations}")
-print(f"no_observations: {no_observations}")
+random.shuffle(no_observations)
 
 # Split into 16 roughly equal batches
 batch_size = len(yes_observations) // 16
-yes_batches = [yes_observations[i:i + batch_size] for i in range(0, len(yes_observations), batch_size)]
-
+yes_batches = [yes_observations[i*batch_size:(i+1)*batch_size] for i in range(0, 16)]
 # Select best from each batch
 best_yes_observations = []
-for batch in yes_batches[:16]:  # Take first 16 batches
+for batch in yes_batches:
     selected = select_best_observations(
         client=client,
         observations=batch,
@@ -66,10 +62,10 @@ for batch in yes_batches[:16]:  # Take first 16 batches
     best_yes_observations.extend(selected)
 
 # Do the same for no_observations
-random.shuffle(no_observations)
-no_batches = [no_observations[i:i + batch_size] for i in range(0, len(no_observations), batch_size)]
+batch_size = len(no_observations) // 16
+no_batches = [no_observations[i*batch_size:(i+1)*batch_size] for i in range(0, 16)]
 best_no_observations = []
-for batch in no_batches[:16]:
+for batch in no_batches:
     selected = select_best_observations(
         client=client,
         observations=batch,
@@ -77,7 +73,6 @@ for batch in no_batches[:16]:
         easy_to_verify=False,
         verbose=False
     )
-    print(f"from no batch: {batch} selected: {selected}")
     best_no_observations.extend(selected)
 
 # Initialize observations and 'no's lists
@@ -88,64 +83,58 @@ nos_list = best_no_observations
 for search_depth in range(1, MAX_SEARCH_DEPTH+1):
     print(f"Search Depth: {search_depth}")
     if not nos_list:
-        break  # No more 'no' observations to expand upon
+        print("No more 'no' observations to expand upon")
+        break
     new_observations = []
-    new_nos = []
     for no_observation in nos_list:
         # Generate questions for this observation
         questions = generate_questions(
             client=client,
             observation=no_observation,
-            num_questions=16
+            num_questions=5
         )
-        
+        print(f"questions: {questions}")
         # Create additional context combining the original observation and questions
-        questions_context = "\n".join([f"- {q}" for q in questions])
-        additional_context = (
-            f"Here's an observation I made. For all of the observations "
-            f"you give, please address these specific questions about the observation:\n"
-            f"{questions_context}\n\n"
-            f"Original observation:\n{no_observation}"
-        )
-        
-        # Generate observations with the enhanced context
         observations = generate_observations(
             client=client,
-            num_observations=16,
+            num_observations=5,
             task=task,
             verbose=False,
-            additional_context=additional_context
+            questions = questions,
+            original_observation=no_observation
         )
-        
-        # Classify observations
-        yes_obs, no_obs = classify_observations(
-            client=client,
-            observations=observations,
-            verbose=False
-        )
-        
-        # Select best observations
-        best_yes_obs = select_best_observations(
-            client=client,
-            observations=yes_obs,
-            num_best=16,
-            easy_to_verify=True,
-            verbose=False
-        )
-        best_no_obs = select_best_observations(
-            client=client,
-            observations=no_obs,
-            num_best=16,
-            easy_to_verify=False,
-            verbose=False
-        )
-        
-        # Add to lists
-        observations_list.extend(best_yes_obs)
-        new_nos.extend(best_no_obs)
-    nos_list = new_nos
+        print(f"observations: {observations}")
+        new_observations.extend(observations)
+    
+    # Classify observations
+    yes_obs, no_obs = classify_observations(
+        client=client,
+        observations=new_observations,
+        max_observations_per_call = 5,
+        verbose=False
+    )
+    print(f"yes_obs: {yes_obs}")
+    print(f"no_obs: {no_obs}")  
+    # Select best observations
+    best_yes_obs = select_best_observations(
+        client=client,
+        observations=yes_obs,
+        num_best=4,
+        easy_to_verify=True,
+        verbose=False
+    )
+    best_no_obs = select_best_observations(
+        client=client,
+        observations=no_obs,
+        num_best=16,
+        easy_to_verify=False,
+        verbose=False
+    )
+    
+    # Add to lists
+    observations_list.extend(best_yes_obs)
+    nos_list = best_no_obs
 
-# Process and verify observations
 verified_observations = process_and_verify_observations(
     client=client,
     observations=observations_list,
