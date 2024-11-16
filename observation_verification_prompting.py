@@ -6,7 +6,7 @@ from typing import List, Dict, Union
 from dotenv import load_dotenv
 from prompting_utils import grid_to_python_literal
 from FSP_DATA.observation_verification import FSP_RAW
-
+from prompting_utils import extract_code_from_response
 load_dotenv()
 
 VERIFICATION_GEN_TEMP = 0.0
@@ -82,19 +82,6 @@ def generate_verification_code(
         print(f"Verification code: {code}")
     
     return code
-
-def extract_code_from_response(response: str) -> str:
-    """Extract Python code from a response that may contain markdown or explanations."""
-    # Look for code between Python code fence markers
-    import re
-    code_pattern = r"```(?:python)?\s*(.*?)```"
-    matches = re.findall(code_pattern, response, re.DOTALL)
-    
-    if matches:
-        return matches[0].strip()
-    
-    # Fallback: If no code blocks found, return the whole response
-    return response.strip()
 
 def verify_observation(
     verification_code: str,
